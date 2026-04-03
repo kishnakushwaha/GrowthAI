@@ -3,8 +3,8 @@
   "version": "1.0.0",
   "description": "WhatsApp Microservice for GrowthAI",
   "scripts": {
-    "postinstall": "npx puppeteer browsers install chrome",
-    "start": "node server.js"
+    "postinstall": "PUPPETEER_CACHE_DIR=./.cache npx puppeteer browsers install chrome",
+    "start": "PUPPETEER_CACHE_DIR=./.cache node server.js"
   },
   "dependencies": {
     "whatsapp-web.js": "^1.26.0",
