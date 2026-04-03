@@ -2,8 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Search, Download, Filter, Flame, Globe, Phone, MapPin, Star, 
   ExternalLink, Loader2, PlayCircle, X, ChevronLeft, ChevronRight,
-  BarChart3, Users, AlertTriangle, TrendingUp, Mail
+  BarChart3, Users, AlertTriangle, TrendingUp, Mail, FileSpreadsheet
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import './Leads.css';
 
 import API from '../config';
@@ -28,12 +29,12 @@ const Leads = () => {
   const [sortDir, setSortDir] = useState('desc');
 
   // Scraper
-  const [scrapeQuery, setScrapeQuery] = useState('');
+  const [scrapeQuery, setScrapeQuery] = useState(() => sessionStorage.getItem('scrapeQuery') || '');
   const [scrapeCount, setScrapeCount] = useState(20);
   const [scraping, setScraping] = useState(false);
   const [scrapeLog, setScrapeLog] = useState([]);
-  const [showScrapePanel, setShowScrapePanel] = useState(false);
-  const [activeJobId, setActiveJobId] = useState(null);
+  const [showScrapePanel, setShowScrapePanel] = useState(() => !!sessionStorage.getItem('activeScrapeJob'));
+  const [activeJobId, setActiveJobId] = useState(() => sessionStorage.getItem('activeScrapeJob') || null);
 
   const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
 
@@ -66,7 +67,32 @@ const Leads = () => {
 
   // Poll active scrape job
   useEffect(() => {
-    if (!activeJobId) return;
+    if (!activeJobId) {
+      setScraping(false);
+      return;
+    }
+    
+    sessionStorage.setItem('activeScrapeJob', activeJobId);
+    setScraping(true);
+    // Open the panel if there's an active job running in background
+    setShowScrapePanel(true);
+    
+    // Fetch immediately on mount to not wait 2 seconds for first update UI
+    const checkJob = async () => {
+      try {
+        const res = await fetch(`${API}/api/scrape/${activeJobId}`, { headers });
+        const job = await res.json();
+        setScrapeLog(job.output || []);
+        if (job.status !== 'running') {
+          setScraping(false);
+          setActiveJobId(null);
+          sessionStorage.removeItem('activeScrapeJob');
+          fetchLeads(); // Refresh leads
+        }
+      } catch (err) { console.error(err); }
+    };
+    checkJob();
+
     const interval = setInterval(async () => {
       try {
         const res = await fetch(`${API}/api/scrape/${activeJobId}`, { headers });
@@ -75,6 +101,7 @@ const Leads = () => {
         if (job.status !== 'running') {
           setScraping(false);
           setActiveJobId(null);
+          sessionStorage.removeItem('activeScrapeJob');
           clearInterval(interval);
           fetchLeads(); // Refresh leads
         }
@@ -87,6 +114,7 @@ const Leads = () => {
     if (!scrapeQuery.trim()) return;
     setScraping(true);
     setScrapeLog(['Starting scraper...']);
+    sessionStorage.setItem('scrapeQuery', scrapeQuery);
     try {
       const res = await fetch(`${API}/api/scrape`, {
         method: 'POST', headers,
@@ -98,6 +126,15 @@ const Leads = () => {
       setScrapeLog(['Failed to start scraper']);
       setScraping(false);
     }
+  };
+
+  const fetchExportData = async () => {
+    const res = await fetch(`${API}/api/leads/export`, { headers });
+    if (!res.ok) throw new Error('Export failed to fetch');
+    const textData = await res.text();
+    // Parse CSV into rows array
+    const rows = textData.split('\n').map(row => row.split(',').map(cell => cell.replace(/^"|"$/g, '').trim()));
+    return rows;
   };
 
   const exportCSV = async () => {
@@ -116,6 +153,19 @@ const Leads = () => {
     } catch (err) {
       console.error('Export failed:', err);
       alert('Export failed. Please try again.');
+    }
+  };
+
+  const exportExcel = async () => {
+    try {
+      const rows = await fetchExportData();
+      const ws = XLSX.utils.aoa_to_sheet(rows);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Leads");
+      XLSX.writeFile(wb, "leads_export.xlsx");
+    } catch (err) {
+      console.error('Excel export failed:', err);
+      alert('Excel export failed. Please try again.');
     }
   };
 
@@ -140,6 +190,9 @@ const Leads = () => {
           <p className="text-muted">Scrape, filter, and manage your prospect database</p>
         </div>
         <div className="leads-header-actions">
+          <button className="btn btn-secondary" onClick={exportExcel}>
+            <FileSpreadsheet size={18} /> Export Excel
+          </button>
           <button className="btn btn-secondary" onClick={exportCSV}>
             <Download size={18} /> Export CSV
           </button>
