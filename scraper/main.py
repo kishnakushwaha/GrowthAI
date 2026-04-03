@@ -52,7 +52,6 @@ async def scrape_google_maps(query, item_limit=20):
                     break
                 except:
                     continue
-            
             if not found:
                 print("⚠️ Still waiting, taking a screenshot to debug...")
                 await page.screenshot(path="scraper_debug.png")
@@ -61,6 +60,7 @@ async def scrape_google_maps(query, item_limit=20):
                 print("✅ Found results feed after extra wait.")
         except Exception as e:
             print(f"❌ Could not find results feed: {str(e)}")
+            await page.screenshot(path="no_feed_debug.png")
             await browser.close()
             return
 
@@ -68,9 +68,23 @@ async def scrape_google_maps(query, item_limit=20):
         extracted_count = 0
         processed_urls = set()
 
+        print("🔍 Starting extraction loop...")
+
         while extracted_count < item_limit and scroll_attempts < 15:
+            # Re-locate the feed on every iteration to keep it fresh
+            # Locator fallbacks
             place_links = await page.locator('a[href*="/maps/place/"]').all()
+            if not place_links:
+                # Try fallback list-item selector if maps/place doesn't work
+                place_links = await page.locator('div.q2oYwe a').all()
+
+            print(f"📍 Found {len(place_links)} potential business links on current view (Attempt {scroll_attempts+1})")
             
+            if not place_links and scroll_attempts > 2:
+                print("⚠️ No links found, maybe Google is blocking? Taking screenshot.")
+                await page.screenshot(path="no_links_debug.png")
+
+            # Try to grab what we can without over-scrolling first
             for link in place_links:
                 if extracted_count >= item_limit:
                     break
@@ -82,11 +96,17 @@ async def scrape_google_maps(query, item_limit=20):
                 processed_urls.add(url)
                 
                 try:
+                    # Scroll exactly to the link so it's clickable
                     await link.scroll_into_view_if_needed()
+                    print(f"👉 Extracting lead {extracted_count + 1}...")
+                    
+                    # Instead of a full click, let's try a light data grab first if we can
+                    # But for Website and Phone we USUALLY need the sidebar
                     await link.click()
                     
-                    await page.wait_for_selector('h1', timeout=5000)
-                    await page.wait_for_timeout(2000)
+                    # Fast timeout for sidebar wait
+                    await page.wait_for_selector('h1', timeout=8000)
+                    await page.wait_for_timeout(1500) # Small breathing room for JS
 
                     detail = page.locator('div[role="main"]').last
 
@@ -98,33 +118,41 @@ async def scrape_google_maps(query, item_limit=20):
                     except:
                         pass
 
+                    if name == "Unknown":
+                        # Try to get it from the link itself or parent
+                        try:
+                            name = await link.get_attribute('aria-label')
+                        except:
+                            pass
+
                     # ---- RATING & REVIEWS ----
                     rating = "N/A"
                     reviews = "0"
                     try:
-                        header_div = detail.locator('div.TIHn2')
-                        if await header_div.count() > 0:
-                            header_text = await header_div.first.inner_text()
-                            
-                            rating_match = re.search(r'\b(\d\.\d)\b', header_text)
-                            if rating_match:
-                                rating = rating_match.group(1)
-                            
-                            review_match = re.search(r'\(([0-9,]+)\)', header_text)
-                            if review_match:
-                                reviews = review_match.group(1).replace(',', '')
+                        # Improved rating locator
+                        rating_span = detail.locator('span.ceNzR').first
+                        if await rating_span.count() > 0:
+                            rating_text = await rating_span.get_attribute('aria-label')
+                            # e.g. "4.5 stars"
+                            rating = re.search(r'\d\.\d', rating_text).group(0) if re.search(r'\d\.\d', rating_text) else "N/A"
+                        
+                        review_span = detail.locator('span.jANrl').first
+                        if await review_span.count() > 0:
+                            review_text = await review_span.inner_text()
+                            # e.g. "(1,234)"
+                            reviews = review_text.replace('(', '').replace(')', '').replace(',', '').strip()
                     except:
                         pass
                     
-                    # ---- MAPS URL ----
-                    maps_url = page.url
+                    # ---- EMAIL (Search in description or through website in next step) ----
+                    email = "N/A" # Maps doesn't provide email directly, usually handled by Audit Engine later
 
                     # ---- PHONE ----
                     phone = "N/A"
                     try:
-                        phone_element = detail.locator('button[data-item-id^="phone:tel:"]')
-                        if await phone_element.count() > 0:
-                            phone = await phone_element.first.get_attribute('aria-label')
+                        phone_elements = detail.locator('button[data-item-id^="phone:tel:"]')
+                        if await phone_elements.count() > 0:
+                            phone = await phone_elements.first.get_attribute('aria-label')
                             phone = phone.replace("Phone: ", "").strip()
                     except:
                         pass
@@ -151,6 +179,7 @@ async def scrape_google_maps(query, item_limit=20):
                     lead_data = {
                         "place_name": name,
                         "industry": query,
+  "industry": query,
                         "rating": rating,
                         "reviews": reviews,
                         "phone": phone,
