@@ -87,13 +87,10 @@ const EmailOutreach = () => {
         if (email) setComposeTo(email);
         if (business) {
           setComposeBusiness(business);
-          setComposeVars(prev => {
-            const updated = { ...prev, business_name: business };
-            if (rawTemplate.subject) {
-              setComposeSubject(rawTemplate.subject.replace(/{{business_name}}/g, business));
-            }
-            return updated;
-          });
+          setComposeVars(prev => ({ ...prev, business_name: business }));
+          if (rawTemplate.subject) {
+            setComposeSubject(rawTemplate.subject.replace(/{{business_name}}/g, business));
+          }
         }
         
         // Remove the query parameters from URL without refreshing or changing section
@@ -132,9 +129,21 @@ const EmailOutreach = () => {
     setConfiguring(false);
   };
 
+  const extractFirstName = (bizName) => {
+    if (!bizName) return '';
+    const parts = bizName.split(/[\s'|,-]+/);
+    const firstWord = parts[0];
+    
+    const generics = ['the', 'sri', 'shree', 'jai', 'dr', 'mr', 'mrs', 'new', 'best', 'top', 'super', 'a', 'an'];
+    if (generics.includes(firstWord.toLowerCase()) || firstWord.length <= 2) {
+      return `Team`;
+    }
+    return firstWord.charAt(0).toUpperCase() + firstWord.slice(1).toLowerCase();
+  };
+
   // Auto-fill: compute variables from compose fields
   const getAutoVars = (name, business) => ({
-    contact_name: name || '',
+    contact_name: name || extractFirstName(business) || 'Team',
     business_name: business || '',
     city: 'Delhi',
     industry: '',

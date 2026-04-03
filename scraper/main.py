@@ -110,17 +110,20 @@ async def scrape_google_maps(query, item_limit=20):
                     await link.click()
                     
                     # Wait for sidebar to fully load with the NEW business data
+                    detail = page.locator('div[role="main"]').last
                     try:
-                        detail = page.locator('div[role="main"]').last
-                        # Wait for the h1 to match our expected name (confirms panel swapped)
+                        # Step 1: Wait for h1 to show the new business name (confirms panel swapped)
                         safe_name_prefix = re.escape(name[:20])
                         await detail.locator('h1', has_text=re.compile(safe_name_prefix, re.IGNORECASE)).first.wait_for(timeout=8000)
-                        # Extra wait for phone/website/address to render (they load AFTER the title)
-                        await page.wait_for_timeout(2500)
+                        # Step 2: Wait for contact/action buttons to load (phone/address arrive via a separate XHR after the title)
+                        try:
+                            await detail.locator('button[data-item-id], a[data-item-id]').first.wait_for(timeout=6000)
+                        except:
+                            # Some businesses have no contact info at all — that's fine, just give extra flat time
+                            await page.wait_for_timeout(2000)
                     except:
-                        # If name match fails, just give it a generous flat wait
-                        await page.wait_for_timeout(4000)
-                        detail = page.locator('div[role="main"]').last
+                        # If name match fails entirely, give a generous flat wait
+                        await page.wait_for_timeout(5000)
 
                     # ---- RATING & REVIEWS (aria-label based, not class names) ----
                     rating = "N/A"
