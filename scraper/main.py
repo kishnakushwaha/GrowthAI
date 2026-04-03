@@ -11,20 +11,56 @@ async def scrape_google_maps(query, item_limit=20):
     init_db()
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
+        print("🔧 Launching browser in lean mode...")
+        browser = await p.chromium.launch(
+            headless=True,
+            args=[
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-gpu',
+                '--no-first-run',
+                '--no-zygote',
+                '--single-process' # Saves RAM on Free Tier
+            ]
+        )
         context = await browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         )
         page = await context.new_page()
         
         search_url = f"https://www.google.com/maps/search/{urllib.parse.quote(query)}/?hl=en"
+        print(f"🔗 Navigating to: {search_url}")
         await page.goto(search_url)
         
-        print("Waiting for results to load...")
+        print("⏳ Waiting for results to load (max 60s)...")
         try:
-            await page.wait_for_selector('div[role="feed"]', timeout=15000)
-        except:
-            print("Could not find feed. Check if the query returned results.")
+            # Try multiple possible selectors as Google Maps layout varies
+            feed_selectors = [
+                'div[role="feed"]',
+                'div.m67q60-m67q60-ia-p', # Sometimes used for the list
+                'div[aria-label^="Results for"]',
+                'div[role="main"]'
+            ]
+            
+            found = False
+            for selector in feed_selectors:
+                try:
+                    await page.wait_for_selector(selector, timeout=15000)
+                    print(f"✅ Found results feed using: {selector}")
+                    found = True
+                    break
+                except:
+                    continue
+            
+            if not found:
+                print("⚠️ Still waiting, taking a screenshot to debug...")
+                await page.screenshot(path="scraper_debug.png")
+                # Final attempt with longer timeout on primary selector
+                await page.wait_for_selector('div[role="feed"]', timeout=45000)
+                print("✅ Found results feed after extra wait.")
+        except Exception as e:
+            print(f"❌ Could not find results feed: {str(e)}")
             await browser.close()
             return
 

@@ -16,14 +16,19 @@ export function renderTemplate(template, variables) {
 // ==================== SEED DEFAULT TEMPLATES ====================
 
 async function seedTemplates() {
-  const { data, error } = await supabase.from('email_templates').select('id').limit(1);
-  if (error || (data && data.length > 0)) return; // Already seeded or error
+  try {
+    const { data, error } = await supabase.from('email_templates').select('id').limit(1);
+    if (error) {
+      console.warn('⚠️ Could not check email_templates table (migration may be missing). Skipping seeding.');
+      return;
+    }
+    if (data && data.length > 0) return; // Already seeded
 
-  const templates = [
-    {
-      name: 'Website Audit Intro',
-      subject: 'Quick question about {{business_name}}\'s online presence',
-      body: `Hi {{contact_name}},
+    const templates = [
+      {
+        name: 'Website Audit Intro',
+        subject: "Quick question about {{business_name}}'s online presence",
+        body: `Hi {{contact_name}},
 
 I came across {{business_name}} while researching businesses in {{city}} and noticed a few things about your online presence that could be costing you customers.
 
@@ -39,11 +44,11 @@ I help businesses like yours get 20-50 new leads per month through AI-powered Go
 Best regards,
 GrowthAI Engine Team
 📞 +91 87439 33258`
-    },
-    {
-      name: 'Follow-Up (Day 3)',
-      subject: 'Re: Your website audit results for {{business_name}}',
-      body: `Hi {{contact_name}},
+      },
+      {
+        name: 'Follow-Up (Day 3)',
+        subject: "Re: Your website audit results for {{business_name}}",
+        body: `Hi {{contact_name}},
 
 Just following up on the website audit I sent earlier for {{business_name}}.
 
@@ -63,11 +68,11 @@ Want to chat for 10 minutes this week? I'm happy to walk you through our approac
 
 Best,
 GrowthAI Engine Team`
-    },
-    {
-      name: 'Social Proof (Day 7)',
-      subject: '{{business_name}} — Last thought from us',
-      body: `Hi {{contact_name}},
+      },
+      {
+        name: 'Social Proof (Day 7)',
+        subject: "{{business_name}} — Last thought from us",
+        body: `Hi {{contact_name}},
 
 This is my last follow-up, so I'll keep it brief.
 
@@ -81,11 +86,14 @@ If the timing isn't right, no worries at all. Wishing {{business_name}} all the 
 
 Cheers,
 GrowthAI Engine Team`
-    }
-  ];
+      }
+    ];
 
-  await supabase.from('email_templates').insert(templates);
-  console.log('✅ Default email templates seeded to Supabase');
+    await supabase.from('email_templates').insert(templates);
+    console.log('✅ Default email templates seeded to Supabase');
+  } catch (err) {
+    console.error('Template seeding failed:', err.message);
+  }
 }
 
 // Seed on startup
@@ -97,24 +105,71 @@ let transporter = null;
 let smtpEmail = null;
 
 export async function configureSmtp(config) {
-  const t = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    auth: {
-      user: config.email,
-      pass: config.password
-    },
-    tls: {
-      rejectUnauthorized: false
-    }
-  });
+  try {
+    const t = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: {
+        user: config.email,
+        pass: config.password
+      },
+      tls: {
+        rejectUnauthorized: false
+      }
+    });
 
-  await t.verify();
-  
-  transporter = t;
-  smtpEmail = config.email;
-  return transporter;
+    await t.verify();
+    
+    transporter = t;
+    smtpEmail = config.email;
+
+    // Persist to Supabase settings table
+    const { error: saveError } = await supabase.from('settings').upsert({
+      key: 'smtp_config',
+      value: { email: config.email, password: config.password },
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'key' });
+
+    if (saveError) {
+      console.error('SMTP persistence failed:', saveError.message);
+    }
+
+    return { success: true, email: config.email };
+  } catch (err) {
+    console.error('SMTP configuration failed:', err.message);
+    throw err;
+  }
+}
+
+export async function loadSmtpConfig() {
+  try {
+    const { data, error } = await supabase.from('settings').select('value').eq('key', 'smtp_config').single();
+    if (error || !data) return null;
+
+    const config = data.value;
+    const t = nodemailer.createTransport({
+      host: 'smtp.gmail.com',
+      port: 465,
+      secure: true,
+      auth: {
+        user: config.email,
+        pass: config.password
+      },
+      tls: {
+        rejectUnauthorized: false
+      }
+    });
+
+    await t.verify();
+    transporter = t;
+    smtpEmail = config.email;
+    console.log(`✅ SMTP initialized from database (${smtpEmail})`);
+    return transporter;
+  } catch (err) {
+    console.warn('⚠️ SMTP settings found but could not be initialized (invalid password or network issue).');
+    return null;
+  }
 }
 
 export function getTransporter() {

@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
 import { runAudit } from './auditEngine.js';
 import supabase from './supabaseClient.js';
-import { configureSmtp, getTransporter, getSmtpEmail, sendEmail, renderTemplate, trackOpen, trackClick } from './emailEngine.js';
+import { configureSmtp, getTransporter, getSmtpEmail, sendEmail, renderTemplate, trackOpen, trackClick, loadSmtpConfig } from './emailEngine.js';
 import { STAGES, getLeads, createLead, updateLead, deleteLead, getActivities, addActivity, importFromScraper, getAnalytics } from './crmEngine.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -307,30 +307,21 @@ app.get('/api/audits/:id', async (req, res) => {
 // ===================== EMAIL / OUTREACH API (Supabase) =====================
 
 // POST /api/email/configure — Set SMTP credentials
-app.post('/api/email/configure', requireAuth, async (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and App Password are required' });
-  }
-  try {
-    await configureSmtp({ email, password: password.replace(/\s/g, '') });
-    res.json({ success: true, message: `✅ Connected! SMTP configured for ${email}`, email });
-  } catch (err) {
-    console.error('SMTP config error:', err);
-    let errorMsg = err.message;
-    if (err.message.includes('Invalid login') || err.message.includes('auth')) {
-      errorMsg = 'Invalid credentials. Make sure you are using a Gmail App Password (not your regular password). Go to: Google Account → Security → 2-Step Verification → App Passwords.';
-    } else if (err.message.includes('ECONNREFUSED') || err.message.includes('ETIMEDOUT')) {
-      errorMsg = 'Could not connect to Gmail SMTP server. Check your internet connection.';
-    }
-    res.status(400).json({ error: errorMsg });
-  }
-});
-
 // GET /api/email/status — Check if SMTP is configured
-app.get('/api/email/status', requireAuth, (req, res) => {
-  const t = getTransporter();
-  res.json({ configured: !!t, email: getSmtpEmail() || null });
+app.get('/api/email/status', requireAuth, async (req, res) => {
+  try {
+    // If transporter isn't initialized yet, try loading it from DB
+    if (!getTransporter()) {
+      await loadSmtpConfig();
+    }
+    
+    res.json({ 
+      configured: !!getTransporter(), 
+      email: getSmtpEmail() || null 
+    });
+  } catch (err) {
+    res.json({ configured: false, email: null });
+  }
 });
 
 // GET /api/email/templates — List templates
@@ -339,12 +330,30 @@ app.get('/api/email/templates', requireAuth, async (req, res) => {
     const { data: templates, error } = await supabase
       .from('email_templates')
       .select('*')
-      .order('id');
+      .order('id', { ascending: true });
     
     if (error) throw error;
     res.json({ templates: templates || [] });
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch templates' });
+  }
+});
+
+// POST /api/email/configure — Save SMTP settings
+app.post('/api/email/configure', requireAuth, async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+
+  try {
+    // Basic validation / verification before saving
+    await configureSmtp({ email, password });
+    res.json({ success: true, email });
+  } catch (err) {
+    let errorMsg = err.message;
+    if (err.message.includes('Invalid login') || err.message.includes('auth')) {
+      errorMsg = 'Invalid credentials. Make sure you are using a Gmail App Password.';
+    }
+    res.status(500).json({ error: 'Failed to configure SMTP: ' + errorMsg });
   }
 });
 
@@ -411,7 +420,7 @@ app.post('/api/email/send', requireAuth, async (req, res) => {
 
     const result = await sendEmail({
       to, toName, businessName, subject, body,
-      trackingBaseUrl: `http://localhost:${PORT}`
+      trackingBaseUrl: process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`
     });
     res.json(result);
   } catch (err) {
@@ -508,7 +517,7 @@ app.post('/api/campaigns/:id/send', requireAuth, async (req, res) => {
           businessName: r.businessName,
           subject, body,
           campaignId: parseInt(req.params.id),
-          trackingBaseUrl: `http://localhost:${PORT}`
+          trackingBaseUrl: process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`
         });
         sentCount++;
         results.push({ email: r.email, status: 'sent', trackingId: result.trackingId });
