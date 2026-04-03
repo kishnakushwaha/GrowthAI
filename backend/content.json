@@ -1,0 +1,10 @@
+{
+  "location": "Delhi",
+  "email": "dummy@gmail.com",
+  "whatsappNumber": "+918743933258",
+  "pricing": {
+    "starter": 8000,
+    "growth": 15000,
+    "pro": 25000
+  }
+}

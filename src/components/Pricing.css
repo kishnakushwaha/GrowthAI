@@ -1,0 +1,136 @@
+.pricing {
+  position: relative;
+  overflow: hidden;
+}
+
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2rem;
+  margin-top: 3rem;
+  align-items: stretch;
+}
+
+.pricing-card {
+  padding: 2.5rem;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  transition: transform 0.3s ease;
+}
+
+.pricing-card:hover {
+  transform: translateY(-8px);
+}
+
+.popular-card {
+  border-color: rgba(59, 130, 246, 0.5);
+  box-shadow: 0 10px 40px rgba(59, 130, 246, 0.15);
+  transform: scale(1.05);
+  z-index: 10;
+  background: linear-gradient(180deg, rgba(30, 58, 138, 0.2) 0%, var(--bg-surface-glass) 100%);
+}
+
+.popular-card:hover {
+  transform: scale(1.05) translateY(-8px);
+}
+
+.popular-badge {
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  color: white;
+  padding: 4px 16px;
+  border-radius: 9999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.pricing-header {
+  text-align: center;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid var(--border-light);
+  margin-bottom: 2rem;
+}
+
+.pricing-header h3 {
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.price {
+  margin-bottom: 1rem;
+}
+
+.currency {
+  font-size: 1.5rem;
+  vertical-align: top;
+  color: var(--text-muted);
+}
+
+.amount {
+  font-size: 3.5rem;
+  font-weight: 800;
+  font-family: var(--font-display);
+  line-height: 1;
+}
+
+.period {
+  font-size: 1rem;
+  color: var(--text-muted);
+}
+
+.text-light {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.pricing-features {
+  flex-grow: 1;
+  margin-bottom: 2rem;
+}
+
+.pricing-features ul {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.pricing-features li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 0.95rem;
+}
+
+.pricing-features li svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.pricing-footer {
+  margin-top: auto;
+}
+
+.mt-xl {
+  margin-top: 4rem;
+}
+
+@media (max-width: 900px) {
+  .pricing-grid {
+    grid-template-columns: 1fr;
+    gap: 3rem;
+  }
+  
+  .popular-card {
+    transform: scale(1);
+    order: -1; /* Put most popular first on mobile */
+  }
+  
+  .popular-card:hover {
+    transform: translateY(-8px);
+  }
+}

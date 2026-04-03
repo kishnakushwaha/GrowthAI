@@ -1,0 +1,377 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { 
+  Search, Download, Filter, Flame, Globe, Phone, MapPin, Star, 
+  ExternalLink, Loader2, PlayCircle, X, ChevronLeft, ChevronRight,
+  BarChart3, Users, AlertTriangle, TrendingUp
+} from 'lucide-react';
+import './Leads.css';
+
+const API = 'http://localhost:3001';
+
+const Leads = () => {
+  const [token] = useState(() => sessionStorage.getItem('adminToken') || '');
+  const [leads, setLeads] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [stats, setStats] = useState({});
+  const [industries, setIndustries] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Filters
+  const [search, setSearch] = useState('');
+  const [industry, setIndustry] = useState('');
+  const [minRating, setMinRating] = useState('');
+  const [hotOnly, setHotOnly] = useState(false);
+  const [noWebsite, setNoWebsite] = useState(false);
+  const [lowReviews, setLowReviews] = useState(false);
+  const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState('scraped_at');
+  const [sortDir, setSortDir] = useState('desc');
+
+  // Scraper
+  const [scrapeQuery, setScrapeQuery] = useState('');
+  const [scrapeCount, setScrapeCount] = useState(20);
+  const [scraping, setScraping] = useState(false);
+  const [scrapeLog, setScrapeLog] = useState([]);
+  const [showScrapePanel, setShowScrapePanel] = useState(false);
+  const [activeJobId, setActiveJobId] = useState(null);
+
+  const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+
+  const fetchLeads = useCallback(async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        page, limit: 50,
+        sort_by: sortBy, sort_dir: sortDir,
+        ...(search && { search }),
+        ...(industry && { industry }),
+        ...(minRating && { min_rating: minRating }),
+        ...(hotOnly && { hot_only: 'true' }),
+        ...(noWebsite && { no_website: 'true' }),
+        ...(lowReviews && { low_reviews: 'true' }),
+      });
+      const res = await fetch(`${API}/api/leads?${params}`, { headers });
+      const data = await res.json();
+      setLeads(data.leads || []);
+      setTotal(data.total || 0);
+      setStats(data.stats || {});
+      setIndustries(data.industries || []);
+    } catch (err) {
+      console.error('Failed to fetch leads', err);
+    }
+    setLoading(false);
+  }, [page, sortBy, sortDir, search, industry, minRating, hotOnly, noWebsite, lowReviews, token]);
+
+  useEffect(() => { fetchLeads(); }, [fetchLeads]);
+
+  // Poll active scrape job
+  useEffect(() => {
+    if (!activeJobId) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`${API}/api/scrape/${activeJobId}`, { headers });
+        const job = await res.json();
+        setScrapeLog(job.output || []);
+        if (job.status !== 'running') {
+          setScraping(false);
+          setActiveJobId(null);
+          clearInterval(interval);
+          fetchLeads(); // Refresh leads
+        }
+      } catch (err) { console.error(err); }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [activeJobId]);
+
+  const startScrape = async () => {
+    if (!scrapeQuery.trim()) return;
+    setScraping(true);
+    setScrapeLog(['Starting scraper...']);
+    try {
+      const res = await fetch(`${API}/api/scrape`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ query: scrapeQuery, count: scrapeCount })
+      });
+      const data = await res.json();
+      setActiveJobId(data.jobId);
+    } catch (err) {
+      setScrapeLog(['Failed to start scraper']);
+      setScraping(false);
+    }
+  };
+
+  const exportCSV = () => {
+    window.open(`${API}/api/leads/export?token=${token}`, '_blank');
+  };
+
+  const handleSort = (field) => {
+    if (sortBy === field) {
+      setSortDir(sortDir === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortDir('desc');
+    }
+    setPage(1);
+  };
+
+  const totalPages = Math.ceil(total / 50);
+
+  return (
+    <div className="leads-container">
+      {/* Header */}
+      <div className="leads-header">
+        <div>
+          <h1>Lead <span className="text-gradient">Pipeline</span></h1>
+          <p className="text-muted">Scrape, filter, and manage your prospect database</p>
+        </div>
+        <div className="leads-header-actions">
+          <button className="btn btn-secondary" onClick={exportCSV}>
+            <Download size={18} /> Export CSV
+          </button>
+          <button className="btn btn-primary" onClick={() => setShowScrapePanel(!showScrapePanel)}>
+            <PlayCircle size={18} /> New Scrape
+          </button>
+        </div>
+      </div>
+
+      {/* Scrape Panel */}
+      {showScrapePanel && (
+        <div className="scrape-panel glass-panel">
+          <div className="scrape-panel-header">
+            <h3>🔍 Run Google Maps Scraper</h3>
+            <button onClick={() => setShowScrapePanel(false)}><X size={20} color="var(--text-muted)" /></button>
+          </div>
+          <div className="scrape-form">
+            <div className="scrape-input-group">
+              <input
+                type="text" className="admin-input"
+                placeholder="e.g. Dentist in Delhi, Coaching Institute in Noida..."
+                value={scrapeQuery}
+                onChange={(e) => setScrapeQuery(e.target.value)}
+                disabled={scraping}
+              />
+              <input
+                type="number" className="admin-input count-input"
+                placeholder="Count"
+                value={scrapeCount}
+                onChange={(e) => setScrapeCount(parseInt(e.target.value) || 10)}
+                disabled={scraping}
+                min={5} max={100}
+              />
+              <button className="btn btn-primary" onClick={startScrape} disabled={scraping || !scrapeQuery.trim()}>
+                {scraping ? <><Loader2 size={18} className="spin" /> Scraping...</> : <><Search size={18} /> Start</>}
+              </button>
+            </div>
+          </div>
+          {scrapeLog.length > 0 && (
+            <div className="scrape-log">
+              {scrapeLog.map((line, i) => (
+                <div key={i} className={`log-line ${line.startsWith('ERROR') ? 'log-error' : line.startsWith('✅') ? 'log-success' : ''}`}>
+                  {line}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Stats Cards */}
+      <div className="stats-grid">
+        <div className="stat-card glass-panel">
+          <Users size={24} color="var(--primary)" />
+          <div>
+            <span className="stat-number">{stats.total || 0}</span>
+            <span className="stat-label text-muted">Total Leads</span>
+          </div>
+        </div>
+        <div className="stat-card glass-panel">
+          <Flame size={24} color="#ef4444" />
+          <div>
+            <span className="stat-number">{stats.hot_leads || 0}</span>
+            <span className="stat-label text-muted">Hot Leads</span>
+          </div>
+        </div>
+        <div className="stat-card glass-panel">
+          <AlertTriangle size={24} color="#f59e0b" />
+          <div>
+            <span className="stat-number">{stats.no_website || 0}</span>
+            <span className="stat-label text-muted">No Website</span>
+          </div>
+        </div>
+        <div className="stat-card glass-panel">
+          <TrendingUp size={24} color="var(--accent)" />
+          <div>
+            <span className="stat-number">{stats.avg_rating || '—'}</span>
+            <span className="stat-label text-muted">Avg Rating</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="filters-bar glass-panel">
+        <div className="filter-group">
+          <Search size={18} color="var(--text-muted)" />
+          <input
+            type="text" className="filter-input"
+            placeholder="Search by name, address, phone..."
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+          />
+        </div>
+        <div className="filter-group">
+          <Filter size={18} color="var(--text-muted)" />
+          <select
+            className="filter-select"
+            value={industry}
+            onChange={(e) => { setIndustry(e.target.value); setPage(1); }}
+          >
+            <option value="">All Industries</option>
+            {industries.map(ind => (
+              <option key={ind} value={ind}>{ind}</option>
+            ))}
+          </select>
+        </div>
+        <div className="filter-group">
+          <Star size={18} color="var(--text-muted)" />
+          <select
+            className="filter-select"
+            value={minRating}
+            onChange={(e) => { setMinRating(e.target.value); setPage(1); }}
+          >
+            <option value="">Any Rating</option>
+            <option value="4.5">4.5+ Stars</option>
+            <option value="4">4+ Stars</option>
+            <option value="3">3+ Stars</option>
+            <option value="2">2+ Stars</option>
+          </select>
+        </div>
+        <button
+          className={`filter-btn ${hotOnly ? 'active' : ''}`}
+          onClick={() => { setHotOnly(!hotOnly); setPage(1); }}
+        >
+          <Flame size={16} /> Hot Leads
+        </button>
+        <button
+          className={`filter-btn ${noWebsite ? 'active' : ''}`}
+          onClick={() => { setNoWebsite(!noWebsite); setPage(1); }}
+        >
+          <Globe size={16} /> No Website
+        </button>
+        <button
+          className={`filter-btn ${lowReviews ? 'active review-btn' : 'review-btn'}`}
+          onClick={() => { setLowReviews(!lowReviews); setPage(1); }}
+        >
+          <Star size={16} /> &lt;15 Reviews
+        </button>
+      </div>
+
+      {/* Results Count */}
+      <div className="results-count">
+        <span className="results-count-number">{total}</span>
+        <span className="results-count-label">
+          {total === 1 ? 'lead' : 'leads'} found
+          {(search || industry || minRating || hotOnly || noWebsite || lowReviews) && ` (filtered from ${stats.total || 0} total)`}
+        </span>
+      </div>
+
+      {/* Leads Table */}
+      <div className="leads-table-wrapper glass-panel">
+        {loading ? (
+          <div className="table-loading"><Loader2 size={32} className="spin" /> Loading leads...</div>
+        ) : leads.length === 0 ? (
+          <div className="table-empty">
+            <BarChart3 size={48} color="var(--text-muted)" />
+            <p>No leads found. Run a scrape or adjust your filters.</p>
+          </div>
+        ) : (
+          <table className="leads-table">
+            <thead>
+              <tr>
+                <th className="sortable" onClick={() => handleSort('place_name')}>
+                  Business {sortBy === 'place_name' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
+                </th>
+                <th className="sortable" onClick={() => handleSort('rating')}>
+                  Rating {sortBy === 'rating' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
+                </th>
+                <th className="sortable" onClick={() => handleSort('reviews')}>
+                  Reviews {sortBy === 'reviews' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
+                </th>
+                <th>Phone</th>
+                <th>Website</th>
+                <th>Address</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {leads.map((lead) => (
+                <tr key={lead.id} className={lead.is_hot_lead ? 'hot-row' : ''}>
+                  <td className="name-cell">
+                    <span className="lead-name">{lead.place_name}</span>
+                    <span className="lead-industry text-muted">{lead.industry}</span>
+                  </td>
+                  <td>
+                    <div className="rating-cell">
+                      <Star size={14} color="#f59e0b" fill="#f59e0b" />
+                      <span>{lead.rating !== 'N/A' ? lead.rating : '—'}</span>
+                    </div>
+                  </td>
+                  <td>{lead.reviews || '0'}</td>
+                  <td>
+                    {lead.phone !== 'N/A' ? (
+                      <a href={`tel:${lead.phone}`} className="phone-link">
+                        <Phone size={14} /> {lead.phone}
+                      </a>
+                    ) : <span className="text-muted">—</span>}
+                  </td>
+                  <td>
+                    {lead.website && lead.website !== 'N/A' ? (
+                      <a href={lead.website} target="_blank" rel="noreferrer" className="website-link">
+                        <Globe size={14} /> Visit
+                      </a>
+                    ) : (
+                      <span className="no-website-badge">No Website</span>
+                    )}
+                  </td>
+                  <td className="address-cell">
+                    <MapPin size={14} color="var(--text-muted)" />
+                    <span>{lead.address !== 'N/A' ? lead.address : '—'}</span>
+                  </td>
+                  <td>
+                    {lead.is_hot_lead ? (
+                      <span className="hot-badge"><Flame size={14} /> Hot</span>
+                    ) : (
+                      <span className="cold-badge">Normal</span>
+                    )}
+                  </td>
+                  <td>
+                    {lead.maps_url && (
+                      <a href={lead.maps_url} target="_blank" rel="noreferrer" className="maps-link" title="Open in Google Maps">
+                        <ExternalLink size={16} />
+                      </a>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="pagination">
+            <button disabled={page <= 1} onClick={() => setPage(page - 1)} className="page-btn">
+              <ChevronLeft size={18} />
+            </button>
+            <span className="page-info">Page {page} of {totalPages}</span>
+            <button disabled={page >= totalPages} onClick={() => setPage(page + 1)} className="page-btn">
+              <ChevronRight size={18} />
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default Leads;

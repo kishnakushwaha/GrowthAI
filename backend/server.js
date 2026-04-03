@@ -1,0 +1,681 @@
+import 'dotenv/config';
+import express from 'express';
+import cors from 'cors';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { spawn } from 'child_process';
+import { runAudit } from './auditEngine.js';
+import supabase from './supabaseClient.js';
+import { configureSmtp, getTransporter, getSmtpEmail, sendEmail, renderTemplate, trackOpen, trackClick } from './emailEngine.js';
+import { STAGES, getLeads, createLead, updateLead, deleteLead, getActivities, addActivity, importFromScraper, getAnalytics } from './crmEngine.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const CONTENT_FILE = path.join(__dirname, 'content.json');
+const SCRAPER_DIR = path.join(__dirname, '..', 'scraper');
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'growthaimaster';
+
+// Track active scrape jobs
+const activeJobs = {};
+
+// ===================== AUTH MIDDLEWARE =====================
+const requireAuth = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || authHeader !== `Bearer ${ADMIN_PASSWORD}`) {
+    return res.status(401).json({ error: 'Unauthorized access' });
+  }
+  next();
+};
+
+// ===================== CONTENT API =====================
+app.get('/api/content', (req, res) => {
+  try {
+    const data = fs.readFileSync(CONTENT_FILE, 'utf8');
+    res.json(JSON.parse(data));
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to read content file' });
+  }
+});
+
+app.post('/api/content', requireAuth, (req, res) => {
+  try {
+    const newContent = req.body;
+    fs.writeFileSync(CONTENT_FILE, JSON.stringify(newContent, null, 2));
+    res.json({ success: true, message: 'Content updated successfully' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to save content' });
+  }
+});
+
+// ===================== LEADS API (Supabase) =====================
+
+// GET /api/leads — Fetch scraped leads with filters
+app.get('/api/leads', requireAuth, async (req, res) => {
+  try {
+    const { industry, min_rating, hot_only, no_website, low_reviews, search, sort_by, sort_dir, page = 1, limit = 50 } = req.query;
+
+    let query = supabase.from('businesses').select('*', { count: 'exact' });
+
+    if (industry) query = query.ilike('industry', `%${industry}%`);
+    if (min_rating) query = query.gte('rating', parseFloat(min_rating));
+    if (hot_only === 'true') query = query.eq('is_hot_lead', true);
+    if (no_website === 'true') query = query.or("website.is.null,website.eq.,website.eq.N/A");
+    if (low_reviews === 'true') query = query.lt('reviews', 15);
+    if (search) {
+      query = query.or(`place_name.ilike.%${search}%,address.ilike.%${search}%,phone.ilike.%${search}%`);
+    }
+
+    // Sorting
+    const allowedSorts = ['place_name', 'rating', 'reviews', 'scraped_at', 'is_hot_lead'];
+    const sortField = allowedSorts.includes(sort_by) ? sort_by : 'scraped_at';
+    const ascending = sort_dir === 'asc';
+    query = query.order(sortField, { ascending });
+
+    // Pagination
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    query = query.range(offset, offset + parseInt(limit) - 1);
+
+    const { data: leads, count: total, error } = await query;
+    if (error) throw error;
+
+    // Stats (from all businesses, unfiltered)
+    const { data: allBiz } = await supabase.from('businesses').select('*');
+    const all = allBiz || [];
+    const stats = {
+      total: all.length,
+      hot_leads: all.filter(b => b.is_hot_lead).length,
+      no_website: all.filter(b => !b.website || b.website === 'N/A' || b.website === '').length,
+      avg_rating: all.length > 0
+        ? (all.filter(b => b.rating).reduce((s, b) => s + (parseFloat(b.rating) || 0), 0) / all.filter(b => b.rating).length).toFixed(1)
+        : 0
+    };
+
+    // Industries
+    const industries = [...new Set(all.map(b => b.industry).filter(Boolean))].sort();
+
+    res.json({ leads: leads || [], total: total || 0, stats, industries });
+  } catch (error) {
+    console.error('Leads fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch leads' });
+  }
+});
+
+// GET /api/leads/export — Export CSV
+app.get('/api/leads/export', requireAuth, async (req, res) => {
+  try {
+    const { data: leads, error } = await supabase
+      .from('businesses')
+      .select('*')
+      .order('scraped_at', { ascending: false });
+
+    if (error) throw error;
+
+    const headers = ['Name', 'Industry', 'Rating', 'Reviews', 'Phone', 'Website', 'Address', 'Maps URL', 'Hot Lead', 'Scraped At'];
+    const rows = (leads || []).map(l => [
+      `"${(l.place_name || '').replace(/"/g, '""')}"`,
+      `"${(l.industry || '').replace(/"/g, '""')}"`,
+      l.rating,
+      l.reviews,
+      `"${l.phone || ''}"`,
+      `"${l.website || ''}"`,
+      `"${(l.address || '').replace(/"/g, '""')}"`,
+      `"${l.maps_url || ''}"`,
+      l.is_hot_lead ? 'Yes' : 'No',
+      l.scraped_at
+    ]);
+
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename=leads_export.csv');
+    res.send(csv);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to export' });
+  }
+});
+
+// POST /api/scrape — Trigger a new scrape
+app.post('/api/scrape', requireAuth, (req, res) => {
+  const { query, count = 10 } = req.body;
+
+  if (!query) {
+    return res.status(400).json({ error: 'Search query is required' });
+  }
+
+  const jobId = Date.now().toString();
+
+  activeJobs[jobId] = {
+    status: 'running',
+    query,
+    count,
+    output: [],
+    startedAt: new Date().toISOString()
+  };
+
+  // Spawn the Python scraper
+  const venvPython = path.join(SCRAPER_DIR, 'venv', 'bin', 'python');
+  const scraperScript = path.join(SCRAPER_DIR, 'main.py');
+
+  const proc = spawn(venvPython, [scraperScript, query, count.toString()], {
+    cwd: SCRAPER_DIR
+  });
+
+  proc.stdout.on('data', (data) => {
+    const lines = data.toString().split('\n').filter(l => l.trim());
+    activeJobs[jobId].output.push(...lines);
+    console.log(`[Scraper ${jobId}]`, data.toString().trim());
+  });
+
+  proc.stderr.on('data', (data) => {
+    activeJobs[jobId].output.push(`ERROR: ${data.toString().trim()}`);
+    console.error(`[Scraper ${jobId} ERR]`, data.toString().trim());
+  });
+
+  proc.on('close', (code) => {
+    activeJobs[jobId].status = code === 0 ? 'completed' : 'failed';
+    activeJobs[jobId].completedAt = new Date().toISOString();
+  });
+
+  res.json({ jobId, message: `Scrape started for "${query}" (${count} leads)` });
+});
+
+// GET /api/scrape/:jobId — Check scrape job status
+app.get('/api/scrape/:jobId', requireAuth, (req, res) => {
+  const job = activeJobs[req.params.jobId];
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found' });
+  }
+  res.json(job);
+});
+
+// ===================== AUDIT API (Supabase) =====================
+
+// POST /api/audit — Run a website audit (public — no auth needed)
+app.post('/api/audit', async (req, res) => {
+  const { url, business_name, contact_name, contact_email, contact_phone } = req.body;
+
+  if (!url) {
+    return res.status(400).json({ error: 'Website URL is required' });
+  }
+
+  try {
+    const result = await runAudit(url);
+
+    if (result.error) {
+      return res.status(400).json({ error: result.error });
+    }
+
+    // Save to Supabase
+    const { data: auditRow, error } = await supabase.from('audits').insert({
+      url: result.url,
+      business_name: business_name || '',
+      contact_name: contact_name || '',
+      contact_email: contact_email || '',
+      contact_phone: contact_phone || '',
+      overall_score: result.overallScore,
+      grade: result.grade,
+      critical_issues: result.summary.critical,
+      warnings: result.summary.warnings,
+      passed: result.summary.passed,
+      page_speed_performance: result.pageSpeed?.performance || null,
+      page_speed_seo: result.pageSpeed?.seo || null,
+      full_report: result,
+      status: 'completed'
+    }).select('id').single();
+
+    if (error) throw error;
+
+    res.json({ ...result, auditId: auditRow.id });
+  } catch (error) {
+    console.error('Audit error:', error);
+    res.status(500).json({ error: 'Audit failed: ' + error.message });
+  }
+});
+
+// GET /api/audits — List all audit submissions (admin)
+app.get('/api/audits', requireAuth, async (req, res) => {
+  try {
+    const { page = 1, limit = 50, search } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    let query = supabase
+      .from('audits')
+      .select('id, url, business_name, contact_name, contact_email, contact_phone, overall_score, grade, critical_issues, warnings, passed, page_speed_performance, page_speed_seo, status, created_at', { count: 'exact' });
+
+    if (search) {
+      query = query.or(`url.ilike.%${search}%,contact_name.ilike.%${search}%,contact_email.ilike.%${search}%,business_name.ilike.%${search}%`);
+    }
+
+    query = query.order('created_at', { ascending: false }).range(offset, offset + parseInt(limit) - 1);
+
+    const { data: audits, count: total, error } = await query;
+    if (error) throw error;
+
+    // Stats
+    const { data: allAudits } = await supabase.from('audits').select('overall_score, contact_email');
+    const all = allAudits || [];
+    const stats = {
+      total: all.length,
+      avg_score: all.length > 0 ? Math.round(all.reduce((s, a) => s + (a.overall_score || 0), 0) / all.length) : 0,
+      poor_sites: all.filter(a => (a.overall_score || 0) < 40).length,
+      with_email: all.filter(a => a.contact_email && a.contact_email.trim() !== '').length
+    };
+
+    res.json({ audits: audits || [], total: total || 0, stats });
+  } catch (error) {
+    console.error('Audits list error:', error);
+    res.status(500).json({ error: 'Failed to fetch audits' });
+  }
+});
+
+// GET /api/audits/:id — Get full audit report
+app.get('/api/audits/:id', async (req, res) => {
+  try {
+    const { data: audit, error } = await supabase
+      .from('audits')
+      .select('*')
+      .eq('id', req.params.id)
+      .single();
+
+    if (error || !audit) return res.status(404).json({ error: 'Audit not found' });
+    
+    // full_report is already JSONB in Supabase, no need to parse
+    res.json(audit);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch audit' });
+  }
+});
+
+// ===================== EMAIL / OUTREACH API (Supabase) =====================
+
+// POST /api/email/configure — Set SMTP credentials
+app.post('/api/email/configure', requireAuth, async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and App Password are required' });
+  }
+  try {
+    await configureSmtp({ email, password: password.replace(/\s/g, '') });
+    res.json({ success: true, message: `✅ Connected! SMTP configured for ${email}`, email });
+  } catch (err) {
+    console.error('SMTP config error:', err);
+    let errorMsg = err.message;
+    if (err.message.includes('Invalid login') || err.message.includes('auth')) {
+      errorMsg = 'Invalid credentials. Make sure you are using a Gmail App Password (not your regular password). Go to: Google Account → Security → 2-Step Verification → App Passwords.';
+    } else if (err.message.includes('ECONNREFUSED') || err.message.includes('ETIMEDOUT')) {
+      errorMsg = 'Could not connect to Gmail SMTP server. Check your internet connection.';
+    }
+    res.status(400).json({ error: errorMsg });
+  }
+});
+
+// GET /api/email/status — Check if SMTP is configured
+app.get('/api/email/status', requireAuth, (req, res) => {
+  const t = getTransporter();
+  res.json({ configured: !!t, email: getSmtpEmail() || null });
+});
+
+// GET /api/email/templates — List templates
+app.get('/api/email/templates', requireAuth, async (req, res) => {
+  try {
+    const { data: templates, error } = await supabase
+      .from('email_templates')
+      .select('*')
+      .order('id');
+    
+    if (error) throw error;
+    res.json({ templates: templates || [] });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch templates' });
+  }
+});
+
+// POST /api/email/templates — Create template
+app.post('/api/email/templates', requireAuth, async (req, res) => {
+  const { name, subject, body } = req.body;
+  if (!name || !subject || !body) {
+    return res.status(400).json({ error: 'Name, subject, and body are required' });
+  }
+  try {
+    const { data, error } = await supabase
+      .from('email_templates')
+      .insert({ name, subject, body })
+      .select('id')
+      .single();
+    
+    if (error) throw error;
+    res.json({ success: true, id: data.id });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create template' });
+  }
+});
+
+// PUT /api/email/templates/:id — Update template
+app.put('/api/email/templates/:id', requireAuth, async (req, res) => {
+  const { name, subject, body } = req.body;
+  try {
+    const { error } = await supabase
+      .from('email_templates')
+      .update({ name, subject, body, updated_at: new Date().toISOString() })
+      .eq('id', req.params.id);
+    
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update template' });
+  }
+});
+
+// POST /api/email/send — Send a single email
+app.post('/api/email/send', requireAuth, async (req, res) => {
+  const { to, toName, businessName, templateId, variables } = req.body;
+  if (!to) return res.status(400).json({ error: 'Recipient email required' });
+
+  try {
+    let subject, body;
+
+    if (templateId) {
+      const { data: template, error } = await supabase
+        .from('email_templates')
+        .select('*')
+        .eq('id', templateId)
+        .single();
+      
+      if (error || !template) return res.status(404).json({ error: 'Template not found' });
+      subject = renderTemplate(template.subject, variables || {});
+      body = renderTemplate(template.body, variables || {});
+    } else {
+      subject = req.body.subject;
+      body = req.body.body;
+    }
+
+    if (!subject || !body) return res.status(400).json({ error: 'Subject and body required' });
+
+    const result = await sendEmail({
+      to, toName, businessName, subject, body,
+      trackingBaseUrl: `http://localhost:${PORT}`
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: 'Send failed: ' + err.message });
+  }
+});
+
+// POST /api/campaigns — Create a campaign
+app.post('/api/campaigns', requireAuth, async (req, res) => {
+  const { name, templateId, recipients } = req.body;
+  if (!name || !templateId) return res.status(400).json({ error: 'Name and template required' });
+
+  try {
+    const { data, error } = await supabase
+      .from('campaigns')
+      .insert({ name, template_id: templateId, total_recipients: (recipients || []).length })
+      .select('id')
+      .single();
+
+    if (error) throw error;
+    res.json({ success: true, campaignId: data.id });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create campaign' });
+  }
+});
+
+// GET /api/campaigns — List campaigns
+app.get('/api/campaigns', requireAuth, async (req, res) => {
+  try {
+    const { data: campaigns, error } = await supabase
+      .from('campaigns')
+      .select('*, email_templates(name)')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    // Flatten template name
+    const formattedCampaigns = (campaigns || []).map(c => ({
+      ...c,
+      template_name: c.email_templates?.name || '',
+    }));
+
+    // Stats
+    const stats = {
+      total_campaigns: formattedCampaigns.length,
+      total_sent: formattedCampaigns.reduce((s, c) => s + (c.sent_count || 0), 0),
+      total_opened: formattedCampaigns.reduce((s, c) => s + (c.opened_count || 0), 0),
+      total_clicked: formattedCampaigns.reduce((s, c) => s + (c.clicked_count || 0), 0),
+    };
+
+    res.json({ campaigns: formattedCampaigns, stats });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch campaigns' });
+  }
+});
+
+// POST /api/campaigns/:id/send — Execute campaign
+app.post('/api/campaigns/:id/send', requireAuth, async (req, res) => {
+  const { recipients, variables } = req.body;
+  if (!recipients || recipients.length === 0) {
+    return res.status(400).json({ error: 'Recipients list required' });
+  }
+
+  try {
+    // Get campaign + template
+    const { data: campaign, error: campError } = await supabase
+      .from('campaigns')
+      .select('*, email_templates(subject, body)')
+      .eq('id', req.params.id)
+      .single();
+
+    if (campError || !campaign) return res.status(404).json({ error: 'Campaign not found' });
+
+    const templateSubject = campaign.email_templates?.subject;
+    const templateBody = campaign.email_templates?.body;
+
+    await supabase.from('campaigns')
+      .update({ status: 'sending', total_recipients: recipients.length, sent_at: new Date().toISOString() })
+      .eq('id', req.params.id);
+
+    let sentCount = 0;
+    let failCount = 0;
+    const results = [];
+
+    for (const r of recipients) {
+      const mergedVars = { ...variables, ...r.vars };
+      const subject = renderTemplate(templateSubject, mergedVars);
+      const body = renderTemplate(templateBody, mergedVars);
+
+      try {
+        const result = await sendEmail({
+          to: r.email,
+          toName: r.name,
+          businessName: r.businessName,
+          subject, body,
+          campaignId: parseInt(req.params.id),
+          trackingBaseUrl: `http://localhost:${PORT}`
+        });
+        sentCount++;
+        results.push({ email: r.email, status: 'sent', trackingId: result.trackingId });
+      } catch (err) {
+        failCount++;
+        results.push({ email: r.email, status: 'failed', error: err.message });
+      }
+
+      // 2s delay between emails
+      if (recipients.indexOf(r) < recipients.length - 1) {
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
+
+    await supabase.from('campaigns')
+      .update({ status: 'completed' })
+      .eq('id', req.params.id);
+
+    res.json({ success: true, sent: sentCount, failed: failCount, results });
+  } catch (err) {
+    res.status(500).json({ error: 'Campaign send failed: ' + err.message });
+  }
+});
+
+// GET /api/email/logs — Email activity log
+app.get('/api/email/logs', requireAuth, async (req, res) => {
+  try {
+    const { page = 1, limit = 50 } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    const { data: logs, count: total, error } = await supabase
+      .from('email_logs')
+      .select('*', { count: 'exact' })
+      .order('id', { ascending: false })
+      .range(offset, offset + parseInt(limit) - 1);
+
+    if (error) throw error;
+
+    const { data: allLogs } = await supabase.from('email_logs').select('status, opened_at, clicked_at');
+    const all = allLogs || [];
+    const stats = {
+      total_sent: all.length,
+      total_opened: all.filter(l => l.opened_at).length,
+      total_clicked: all.filter(l => l.clicked_at).length,
+      total_failed: all.filter(l => l.status === 'failed').length
+    };
+
+    res.json({ logs: logs || [], total: total || 0, stats });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch logs' });
+  }
+});
+
+// ===================== CRM / PIPELINE API =====================
+
+// GET /api/crm/stages
+app.get('/api/crm/stages', requireAuth, (req, res) => {
+  res.json({ stages: STAGES });
+});
+
+// GET /api/crm/leads
+app.get('/api/crm/leads', requireAuth, async (req, res) => {
+  try {
+    const filters = {
+      stage: req.query.stage || null,
+      priority: req.query.priority || null,
+      industry: req.query.industry || null,
+      search: req.query.search || null
+    };
+    const result = await getLeads(filters);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch pipeline leads: ' + err.message });
+  }
+});
+
+// POST /api/crm/leads
+app.post('/api/crm/leads', requireAuth, async (req, res) => {
+  try {
+    const id = await createLead(req.body);
+    res.json({ success: true, id });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create lead: ' + err.message });
+  }
+});
+
+// PUT /api/crm/leads/:id
+app.put('/api/crm/leads/:id', requireAuth, async (req, res) => {
+  try {
+    const result = await updateLead(parseInt(req.params.id), req.body);
+    if (!result) return res.status(404).json({ error: 'Lead not found' });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update lead: ' + err.message });
+  }
+});
+
+// DELETE /api/crm/leads/:id
+app.delete('/api/crm/leads/:id', requireAuth, async (req, res) => {
+  try {
+    await deleteLead(parseInt(req.params.id));
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete lead: ' + err.message });
+  }
+});
+
+// PATCH /api/crm/leads/:id/stage
+app.patch('/api/crm/leads/:id/stage', requireAuth, async (req, res) => {
+  try {
+    const { stage } = req.body;
+    await updateLead(parseInt(req.params.id), { stage });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update stage: ' + err.message });
+  }
+});
+
+// GET /api/crm/leads/:id/activities
+app.get('/api/crm/leads/:id/activities', requireAuth, async (req, res) => {
+  try {
+    const activities = await getActivities(parseInt(req.params.id));
+    res.json({ activities });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch activities: ' + err.message });
+  }
+});
+
+// POST /api/crm/leads/:id/activities
+app.post('/api/crm/leads/:id/activities', requireAuth, async (req, res) => {
+  try {
+    const id = await addActivity(parseInt(req.params.id), req.body);
+    res.json({ success: true, id });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to add activity: ' + err.message });
+  }
+});
+
+// POST /api/crm/import
+app.post('/api/crm/import', requireAuth, async (req, res) => {
+  try {
+    const imported = await importFromScraper();
+    res.json({ success: true, imported, message: `${imported} new leads imported from scraper` });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to import leads: ' + err.message });
+  }
+});
+
+// GET /api/crm/analytics
+app.get('/api/crm/analytics', requireAuth, async (req, res) => {
+  try {
+    const analytics = await getAnalytics();
+    res.json(analytics);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch analytics: ' + err.message });
+  }
+});
+
+// Tracking endpoints (public — no auth)
+app.get('/api/track/open/:trackingId', async (req, res) => {
+  await trackOpen(req.params.trackingId);
+  const pixel = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+  res.setHeader('Content-Type', 'image/gif');
+  res.setHeader('Cache-Control', 'no-cache, no-store');
+  res.end(pixel);
+});
+
+app.get('/api/track/click/:trackingId', async (req, res) => {
+  await trackClick(req.params.trackingId);
+  const redirect = req.query.url || '/';
+  res.redirect(redirect);
+});
+
+// ===================== HEALTH / CRON ENDPOINT =====================
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, () => {
+  console.log(`Backend server running on http://localhost:${PORT}`);
+});
