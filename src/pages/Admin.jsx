@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Shield, Settings, Save, LogOut, Globe, DollarSign, 
-  Flame, ChevronRight, Target, Menu, X, FileSearch, Mail, LayoutDashboard
+  Flame, ChevronRight, Target, Menu, X, FileSearch, Mail, LayoutDashboard, MessageCircle
 } from 'lucide-react';
 import Leads from './Leads';
 import AuditLeads from './AuditLeads';
 import EmailOutreach from './EmailOutreach';
+import WhatsAppOutreach from './WhatsAppOutreach';
 import CrmPipeline from './CrmPipeline';
 import './Admin.css';
 import API from '../config';
@@ -18,7 +19,7 @@ const Admin = () => {
   const [activeSection, setActiveSectionState] = useState(() => {
     // Restore section from URL hash on load (e.g. /admin#crm?lead=123)
     const hashData = window.location.hash.replace('#', '').split('?')[0];
-    const validSections = ['general', 'pricing', 'leads', 'audits', 'emails', 'crm'];
+    const validSections = ['general', 'pricing', 'leads', 'audits', 'emails', 'whatsapp', 'crm'];
     return validSections.includes(hashData) ? hashData : 'general';
   });
 
@@ -35,7 +36,7 @@ const Admin = () => {
   useEffect(() => {
     const handleHashChange = () => {
       const hashData = window.location.hash.replace('#', '').split('?')[0];
-      const validSections = ['general', 'pricing', 'leads', 'audits', 'emails', 'crm'];
+      const validSections = ['general', 'pricing', 'leads', 'audits', 'emails', 'whatsapp', 'crm'];
       if (validSections.includes(hashData)) {
         setActiveSectionState(hashData);
       }
@@ -134,6 +135,7 @@ const Admin = () => {
     { id: 'leads', label: 'Lead Pipeline', icon: <Flame size={20} /> },
     { id: 'audits', label: 'Audit Leads', icon: <FileSearch size={20} /> },
     { id: 'emails', label: 'Email Outreach', icon: <Mail size={20} /> },
+    { id: 'whatsapp', label: 'WhatsApp Outreach', icon: <MessageCircle size={20} /> },
     { id: 'crm', label: 'Sales Pipeline', icon: <LayoutDashboard size={20} /> },
     { id: 'site', label: 'View Site', icon: <Globe size={20} />, isLink: true },
   ];
@@ -297,6 +299,9 @@ const Admin = () => {
 
         {/* Email Outreach Section */}
         {activeSection === 'emails' && <EmailOutreach />}
+
+        {/* WhatsApp Outreach Section */}
+        {activeSection === 'whatsapp' && <WhatsAppOutreach />}
 
         {/* CRM Pipeline Section */}
         {activeSection === 'crm' && <CrmPipeline />}

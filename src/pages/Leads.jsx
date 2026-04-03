@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Search, Download, Filter, Flame, Globe, Phone, MapPin, Star, 
   ExternalLink, Loader2, PlayCircle, X, ChevronLeft, ChevronRight,
-  BarChart3, Users, AlertTriangle, TrendingUp, Mail, FileSpreadsheet
+  BarChart3, Users, AlertTriangle, TrendingUp, Mail, FileSpreadsheet, MessageCircle
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import './Leads.css';
@@ -423,7 +423,6 @@ const Leads = () => {
                         className="email-action-btn"
                         title="Send Email"
                         onClick={() => {
-                          // Email is handled by audit engine usually, but we fallback to empty if missing
                           const targetEmail = lead.email && lead.email !== 'N/A' ? lead.email : '';
                           const businessName = lead.place_name || '';
                           window.location.hash = `#emails?email=${encodeURIComponent(targetEmail)}&business=${encodeURIComponent(businessName)}`;
@@ -431,6 +430,18 @@ const Leads = () => {
                         style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', padding: '4px', borderRadius: '4px' }}
                       >
                         <Mail size={16} />
+                      </button>
+                      <button 
+                        className="email-action-btn"
+                        title="WhatsApp Outreach"
+                        onClick={() => {
+                          const targetPhone = lead.phone && lead.phone !== 'N/A' ? lead.phone : '';
+                          const businessName = lead.place_name || '';
+                          window.location.hash = `#whatsapp?phone=${encodeURIComponent(targetPhone)}&business=${encodeURIComponent(businessName)}`;
+                        }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#25D366', padding: '4px', borderRadius: '4px' }}
+                      >
+                        <MessageCircle size={16} />
                       </button>
                     </div>
                   </td>
