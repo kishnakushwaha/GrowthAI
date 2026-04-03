@@ -1,4 +1,5 @@
 import React, { createContext, useState, useEffect } from 'react';
+import API from '../config';
 
 export const ContentContext = createContext();
 
@@ -17,7 +18,7 @@ export const ContentProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('http://localhost:3001/api/content')
+    fetch(`${API}/api/content`)
       .then(res => res.json())
       .then(data => {
         setContent(data);

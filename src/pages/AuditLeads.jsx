@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Search, Mail, Phone, Globe, BarChart3, Users, Target, TrendingDown, ExternalLink, Loader2 } from 'lucide-react';
 import './AuditLeads.css';
 
-const API = 'http://localhost:3001';
+import API from '../config';
 
 const AuditLeads = () => {
   const [token] = useState(() => sessionStorage.getItem('adminToken') || '');

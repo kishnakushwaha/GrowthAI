@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import './Leads.css';
 
-const API = 'http://localhost:3001';
+import API from '../config';
 
 const Leads = () => {
   const [token] = useState(() => sessionStorage.getItem('adminToken') || '');

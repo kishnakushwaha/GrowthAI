@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import './CrmPipeline.css';
 
-const API = 'http://localhost:3001';
+import API from '../config';
 
 const STAGES = [
   { id: 'new', label: 'New Lead', color: '#6366f1', icon: '🆕' },

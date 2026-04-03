@@ -19,7 +19,12 @@ app.use(express.json());
 
 const CONTENT_FILE = path.join(__dirname, 'content.json');
 const SCRAPER_DIR = path.join(__dirname, '..', 'scraper');
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'growthaimaster';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+
+if (!ADMIN_PASSWORD) {
+  console.error('❌ ADMIN_PASSWORD must be set as an environment variable!');
+  process.exit(1);
+}
 
 // Track active scrape jobs
 const activeJobs = {};
@@ -159,11 +164,18 @@ app.post('/api/scrape', requireAuth, (req, res) => {
   };
 
   // Spawn the Python scraper
-  const venvPython = path.join(SCRAPER_DIR, 'venv', 'bin', 'python');
+  let pythonPath = path.join(SCRAPER_DIR, 'venv', 'bin', 'python');
+  
+  // In production or if venv doesn't exist, use system python3
+  if (process.env.NODE_ENV === 'production' || !fs.existsSync(pythonPath)) {
+    pythonPath = 'python3';
+  }
+
   const scraperScript = path.join(SCRAPER_DIR, 'main.py');
 
-  const proc = spawn(venvPython, [scraperScript, query, count.toString()], {
-    cwd: SCRAPER_DIR
+  const proc = spawn(pythonPath, [scraperScript, query, count.toString()], {
+    cwd: SCRAPER_DIR,
+    env: { ...process.env, PYTHONUNBUFFERED: '1' }
   });
 
   proc.stdout.on('data', (data) => {

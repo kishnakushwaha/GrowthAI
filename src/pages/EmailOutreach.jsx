@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import './EmailOutreach.css';
 
-const API = 'http://localhost:3001';
+import API from '../config';
 
 const EmailOutreach = () => {
   const [token] = useState(() => sessionStorage.getItem('adminToken') || '');

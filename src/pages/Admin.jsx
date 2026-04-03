@@ -8,6 +8,7 @@ import AuditLeads from './AuditLeads';
 import EmailOutreach from './EmailOutreach';
 import CrmPipeline from './CrmPipeline';
 import './Admin.css';
+import API from '../config';
 
 const Admin = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -47,7 +48,7 @@ const Admin = () => {
 
   const fetchContent = async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/content');
+      const response = await fetch(`${API}/api/content`);
       const data = await response.json();
       setContent(data);
       setLoading(false);
@@ -61,7 +62,7 @@ const Admin = () => {
     e.preventDefault();
     if (!password) return;
     try {
-      const response = await fetch('http://localhost:3001/api/content');
+      const response = await fetch(`${API}/api/content`);
       if (response.ok) {
         sessionStorage.setItem('adminToken', password);
         setIsAuthenticated(true);
@@ -77,7 +78,7 @@ const Admin = () => {
     setLoading(true);
     const token = sessionStorage.getItem('adminToken');
     try {
-      const response = await fetch('http://localhost:3001/api/content', {
+      const response = await fetch(`${API}/api/content`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify(content)

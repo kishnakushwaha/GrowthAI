@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './AuditForm.css';
 
-const API = 'http://localhost:3001';
+import API from '../config';
 
 const AuditForm = () => {
   const [url, setUrl] = useState('');
