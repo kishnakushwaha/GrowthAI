@@ -1,5 +1,5 @@
 # Use the official Microsoft Playwright image which includes all browser system dependencies
-FROM mcr.microsoft.com/playwright:v1.42.1-jammy
+FROM mcr.microsoft.com/playwright:v1.58.0-jammy
 
 # 1. Install Python and other necessary tools
 RUN apt-get update && apt-get install -y \
