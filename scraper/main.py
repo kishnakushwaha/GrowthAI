@@ -176,10 +176,12 @@ async def scrape_google_maps(query, item_limit=20):
                     except:
                         pass
 
+                    # ---- MAPS URL ----
+                    maps_url = page.url
+
                     lead_data = {
                         "place_name": name,
                         "industry": query,
-  "industry": query,
                         "rating": rating,
                         "reviews": reviews,
                         "phone": phone,

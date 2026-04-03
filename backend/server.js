@@ -697,6 +697,13 @@ app.get('/health', (req, res) => {
 });
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Backend server running on http://localhost:${PORT}`);
+  
+  // Auto-load SMTP config from database on startup
+  try {
+    await loadSmtpConfig();
+  } catch (err) {
+    console.warn('⚠️ SMTP auto-load skipped:', err.message);
+  }
 });
