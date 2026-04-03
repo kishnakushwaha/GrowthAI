@@ -43,7 +43,8 @@ async function startWhatsApp() {
   });
 
   waClient.on('authenticated', () => {
-    console.log('[WA] Authenticated successfully!');
+    console.log('[WA] Authenticated successfully! Processing messages... (this can take a minute)');
+    currentQr = null; // Hide QR code on frontend while waiting for 'ready'
   });
 
   waClient.on('auth_failure', () => {

@@ -269,9 +269,13 @@ const WhatsAppOutreach = () => {
             <div className="badge success">
               <Activity size={14} className="pulse-icon" /> Engine Connected
             </div>
-          ) : (
+          ) : engineQr ? (
             <div className="badge warning">
               <AlertCircle size={14} /> Engine Disconnected (Manual Fallback)
+            </div>
+          ) : (
+            <div className="badge" style={{ background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.3)' }}>
+              <Loader2 size={14} className="spin-icon" /> Engine Connecting...
             </div>
           )}
         </div>
