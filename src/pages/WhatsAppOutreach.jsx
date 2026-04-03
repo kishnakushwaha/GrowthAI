@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   MessageCircle, Send, Settings, FileText, Users, Eye, MousePointer, AlertCircle,
-  Loader2, ChevronDown, ChevronUp, Edit3, Plus, X, Check, Smartphone
+  Loader2, ChevronDown, ChevronUp, Edit3, Plus, X, Check, Smartphone, Activity
 } from 'lucide-react';
+import { WA_API } from '../config';
 import './WhatsAppOutreach.css';
 
 const TEMPLATES_STORAGE_KEY = 'growthai_whatsapp_templates';
@@ -26,6 +27,31 @@ const WhatsAppOutreach = () => {
   const [activeTab, setActiveTab] = useState('compose');
   const [templates, setTemplates] = useState([]);
   
+  // Connect Status State
+  const [engineConnected, setEngineConnected] = useState(false);
+  const [engineQr, setEngineQr] = useState(null);
+  const [sending, setSending] = useState(false);
+  const [sendResult, setSendResult] = useState(null);
+
+  // Poll Engine Status
+  useEffect(() => {
+    let interval;
+    const fetchStatus = async () => {
+      try {
+        const res = await fetch(`${WA_API}/api/wa/status`);
+        const data = await res.json();
+        setEngineConnected(data.connected);
+        setEngineQr(data.qr);
+      } catch (err) {
+        setEngineConnected(false);
+      }
+    };
+    
+    fetchStatus();
+    interval = setInterval(fetchStatus, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
   // Compose form
   const [selectedTemplate, setSelectedTemplate] = useState(null);
   const [composePhone, setComposePhone] = useState('');
@@ -39,7 +65,6 @@ const WhatsAppOutreach = () => {
   const [editingTemplate, setEditingTemplate] = useState(null);
   const [newTemplate, setNewTemplate] = useState(null);
 
-  // Load Templates from LocalStorage
   useEffect(() => {
     const stored = localStorage.getItem(TEMPLATES_STORAGE_KEY);
     if (stored) {
@@ -54,7 +79,6 @@ const WhatsAppOutreach = () => {
     }
   }, []);
 
-  // Handle incoming lead data from URL hash parameters
   useEffect(() => {
     const handlePopulateFromURL = () => {
       const hash = window.location.hash;
@@ -63,15 +87,13 @@ const WhatsAppOutreach = () => {
         const phone = queryParams.get('phone');
         const business = queryParams.get('business');
         
-        // Clean phone number (remove spaces, hyphens)
         if (phone) {
           let cleanPhone = phone.replace(/[\s-()]/g, '');
-          // If it starts with 0, replace with 91 for India (assumption based on local context)
           if (cleanPhone.startsWith('0')) {
             cleanPhone = '91' + cleanPhone.substring(1);
-          } else if (!cleanPhone.startsWith('+')) {
-            // Wait, if it has no prefix, maybe append 91? Or leave as is. 
-            // Most numbers scraped are standard. Let's just strip symbols.
+          } else if (!cleanPhone.startsWith('+') && cleanPhone.length === 10) {
+             cleanPhone = '91' + cleanPhone;
+          } else {
              cleanPhone = cleanPhone.replace(/[^0-9+]/g, '');
           }
           setComposePhone(cleanPhone);
@@ -85,7 +107,6 @@ const WhatsAppOutreach = () => {
           }
         }
         
-        // Remove the query parameters from URL without refreshing
         window.history.replaceState(null, '', window.location.pathname + '#whatsapp');
       }
     };
@@ -95,20 +116,27 @@ const WhatsAppOutreach = () => {
     return () => window.removeEventListener('hashchange', handlePopulateFromURL);
   }, [rawTemplate]);
 
-  // Save templates
   const saveTemplates = (newTpls) => {
     setTemplates(newTpls);
     localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(newTpls));
   };
 
+  const extractFirstName = (bizName) => {
+    if (!bizName) return '';
+    const parts = bizName.split(/[\s'|,-]+/);
+    const firstWord = parts[0];
+    const generics = ['the', 'sri', 'shree', 'jai', 'dr', 'mr', 'mrs', 'new', 'best', 'top', 'super', 'a', 'an'];
+    if (generics.includes(firstWord.toLowerCase()) || firstWord.length <= 2) {
+      return `Team at ${bizName}`;
+    }
+    return firstWord.charAt(0).toUpperCase() + firstWord.slice(1).toLowerCase();
+  };
 
-  // Auto-fill: compute variables from compose fields
   const getAutoVars = (name, business) => ({
-    contact_name: name || '',
+    contact_name: name || extractFirstName(business) || 'Team',
     business_name: business || ''
   });
 
-  // Re-render body from raw template with current vars
   const rerenderFromTemplate = (newVars) => {
     if (rawTemplate.body) {
       let bdy = rawTemplate.body;
@@ -121,7 +149,6 @@ const WhatsAppOutreach = () => {
     }
   };
 
-  // Handle compose field changes — auto-sync to variables AND update body
   const handleNameChange = (val) => {
     setComposeToName(val);
     setComposeVars(prev => {
@@ -145,17 +172,14 @@ const WhatsAppOutreach = () => {
   const applyTemplate = (tpl) => {
     setSelectedTemplate(tpl);
     setRawTemplate({ body: tpl.body });
-    
     const vars = {};
     const matches = (tpl.body).match(/{{(\w+)}}/g) || [];
     matches.forEach(m => { vars[m.replace(/[{}]/g, '')] = ''; });
-    
     const autoVars = getAutoVars(composeToName, composeBusiness);
     for (const key of Object.keys(vars)) {
       if (autoVars[key]) vars[key] = autoVars[key];
     }
     setComposeVars(vars);
-    
     let bdy = tpl.body;
     for (const [key, value] of Object.entries(vars)) {
       if (value) {
@@ -171,24 +195,45 @@ const WhatsAppOutreach = () => {
     rerenderFromTemplate(newVars);
   };
 
-  // Open WhatsApp Link
-  const handleSend = () => {
+  // Open WhatsApp API Link
+  const handleSend = async () => {
     if (!composePhone || !composeBody) {
       alert("Please ensure phone number and message exist.");
       return;
     }
-    // Deep Link Format: https://wa.me/{phone}?text={encodedBody}
-    // Alternatively: https://web.whatsapp.com/send?phone={phone}&text={encodedBody}
     
-    // Clean phone number by removing everything except numbers and plus
-    const cleanNumber = composePhone.replace(/[^0-9+]/g, '');
-    const encodedMessage = encodeURIComponent(composeBody);
-    const url = `https://web.whatsapp.com/send?phone=${cleanNumber}&text=${encodedMessage}`;
-    
-    window.open(url, '_blank');
+    // If engine runs, send silently via API instead of opening new tab!
+    if (engineConnected) {
+      setSending(true);
+      setSendResult(null);
+      try {
+        const res = await fetch(`${WA_API}/api/wa/send`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone: composePhone, message: composeBody })
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          setSendResult({ type: 'success', text: 'Sent natively via API!' });
+          // Clear after a second
+          setTimeout(() => setSendResult(null), 3000);
+        } else {
+          setSendResult({ type: 'error', text: data.error || 'API Failed to connect.' });
+        }
+      } catch (e) {
+        setSendResult({ type: 'error', text: 'Backend engine offline.' });
+      }
+      setSending(false);
+    } else {
+      // Fallback to manual deep-link
+      const cleanNumber = composePhone.replace(/[^0-9+]/g, '');
+      const encodedMessage = encodeURIComponent(composeBody);
+      const url = `https://web.whatsapp.com/send?phone=${cleanNumber}&text=${encodedMessage}`;
+      window.open(url, '_blank');
+    }
   };
 
-  // Template Handlers
   const handleSaveEdit = () => {
     if (!editingTemplate.name || !editingTemplate.body) return;
     const updated = templates.map(t => t.id === editingTemplate.id ? editingTemplate : t);
@@ -206,28 +251,45 @@ const WhatsAppOutreach = () => {
 
   const handleSaveNew = () => {
     if (!newTemplate.name || !newTemplate.body) return;
-    const tpl = {
-      id: `tpl_wa_${Date.now()}`,
-      ...newTemplate
-    };
+    const tpl = { id: `tpl_wa_${Date.now()}`, ...newTemplate };
     saveTemplates([...templates, tpl]);
     setNewTemplate(null);
   };
 
   return (
     <div className="wa-outreach-container">
-      {/* Header */}
       <div className="wa-header">
         <div>
           <h1>WhatsApp <span className="text-wa-gradient">Outreach</span></h1>
-          <p className="text-muted">Direct high-conversion messaging without API limits</p>
+          <p className="text-muted">Direct high-conversion messaging with fully automated API engine</p>
+        </div>
+        
+        <div className="wa-connection-shield">
+          {engineConnected ? (
+            <div className="badge success">
+              <Activity size={14} className="pulse-icon" /> Engine Connected
+            </div>
+          ) : (
+            <div className="badge warning">
+              <AlertCircle size={14} /> Engine Disconnected (Manual Fallback)
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Main Layout */}
+      {engineQr && !engineConnected && (
+        <div className="qr-container glass-panel" style={{ display: 'flex', gap: '2rem', padding: '1.5rem', alignItems: 'center', marginBottom: '1rem', border: '1px dashed #25D366' }}>
+           <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(engineQr)}`} alt="Scan WhatsApp QR" style={{ borderRadius: '8px', border: '4px solid white' }} />
+           <div>
+             <h3><Activity size={18} style={{ color: '#25D366', verticalAlign: 'middle', marginRight: '6px' }} /> Activate Automation Engine</h3>
+             <p className="text-muted" style={{ maxWidth: '500px', fontSize: '0.9rem', lineHeight: 1.5 }}>
+               Your dedicated background engine is currently asleep. Open WhatsApp on your phone, go to Linked Devices, and scan this QR code to unlock fully silent background batch sending.
+             </p>
+           </div>
+        </div>
+      )}
+
       <div className="wa-content">
-        
-        {/* Left Sidebar */}
         <div className="wa-sidebar glass-panel">
           
           <div className="wa-tabs">
