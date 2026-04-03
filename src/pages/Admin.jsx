@@ -16,18 +16,33 @@ const Admin = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSectionState] = useState(() => {
-    // Restore section from URL hash on load (e.g. /admin#crm)
-    const hash = window.location.hash.replace('#', '');
+    // Restore section from URL hash on load (e.g. /admin#crm?lead=123)
+    const hashData = window.location.hash.replace('#', '').split('?')[0];
     const validSections = ['general', 'pricing', 'leads', 'audits', 'emails', 'crm'];
-    return validSections.includes(hash) ? hash : 'general';
+    return validSections.includes(hashData) ? hashData : 'general';
   });
 
   // Update URL hash when section changes
   const setActiveSection = (section) => {
     setActiveSectionState(section);
-    window.location.hash = section;
+    // Persist query params if present
+    const query = window.location.hash.includes('?') ? '?' + window.location.hash.split('?')[1] : '';
+    window.location.hash = section + query;
   };
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // Handle hash changes dynamically without page reload
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hashData = window.location.hash.replace('#', '').split('?')[0];
+      const validSections = ['general', 'pricing', 'leads', 'audits', 'emails', 'crm'];
+      if (validSections.includes(hashData)) {
+        setActiveSectionState(hashData);
+      }
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, []);
   
   const [content, setContent] = useState({
     location: '',

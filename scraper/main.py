@@ -90,40 +90,45 @@ async def scrape_google_maps(query, item_limit=20):
                     break
                     
                 url = await link.get_attribute('href')
-                if not url or url in processed_urls:
+                if not url:
                     continue
                 
-                processed_urls.add(url)
+                # Google Maps heavily modifies the href with live coordinates /@lat,lng or /data= as you scroll
+                clean_url = url.split('?')[0].split('/data=')[0].split('/@')[0]
+                if clean_url in processed_urls:
+                    continue
+                processed_urls.add(clean_url)
                 
                 try:
+                    # ---- BUSINESS NAME (Pre-Click) ----
+                    # Extract the business name directly from the link's aria-label BEFORE doing anything
+                    name = await link.get_attribute('aria-label')
+                    if not name or name == "Results":
+                        continue
+                        
+                    # Huge Speed Optimization: Check CRM BEFORE we waste clicking and waiting
+                    from database import supabase
+                    result = supabase.table('businesses').select('id').eq('place_name', name).execute()
+                    if result.data:
+                        print(f"⏭️ Skipped duplicate: {name} (Already in CRM)")
+                        continue
+                        
                     # Scroll exactly to the link so it's clickable
                     await link.scroll_into_view_if_needed()
                     print(f"👉 Extracting lead {extracted_count + 1}...")
                     
-                    # Instead of a full click, let's try a light data grab first if we can
-                    # But for Website and Phone we USUALLY need the sidebar
+                    # We only click if it's a new lead
                     await link.click()
                     
-                    # Fast timeout for sidebar wait
-                    await page.wait_for_selector('h1', timeout=8000)
-                    await page.wait_for_timeout(1500) # Small breathing room for JS
-
-                    detail = page.locator('div[role="main"]').last
-
-                    # ---- BUSINESS NAME ----
-                    name = "Unknown"
+                    # Fast timeout for sidebar wait, waiting specifically for the DOM to update to the new content
                     try:
-                        name = await detail.locator('h1').first.inner_text()
-                        name = name.strip()
+                        detail = page.locator('div[role="main"]').last
+                        # Force Playwright to wait until the h1 ACTUALLY updates to the new business name
+                        await detail.locator('h1', has_text=re.compile(re.escape(name[:15]), re.IGNORECASE)).first.wait_for(timeout=8000)
+                        await page.wait_for_timeout(2000) # Give React time to swap the phone number and website
                     except:
-                        pass
-
-                    if name == "Unknown":
-                        # Try to get it from the link itself or parent
-                        try:
-                            name = await link.get_attribute('aria-label')
-                        except:
-                            pass
+                        # Fallback pause if strict text match fails 
+                        await page.wait_for_timeout(3000)
 
                     # ---- RATING & REVIEWS ----
                     rating = "N/A"
@@ -144,8 +149,8 @@ async def scrape_google_maps(query, item_limit=20):
                     except:
                         pass
                     
-                    # ---- EMAIL (Search in description or through website in next step) ----
-                    email = "N/A" # Maps doesn't provide email directly, usually handled by Audit Engine later
+                    # ---- EMAIL ----
+                    email = "N/A"
 
                     # ---- PHONE ----
                     phone = "N/A"
@@ -153,7 +158,8 @@ async def scrape_google_maps(query, item_limit=20):
                         phone_elements = detail.locator('button[data-item-id^="phone:tel:"]')
                         if await phone_elements.count() > 0:
                             phone = await phone_elements.first.get_attribute('aria-label')
-                            phone = phone.replace("Phone: ", "").strip()
+                            if phone:
+                                phone = phone.replace("Phone: ", "").strip()
                     except:
                         pass
                         
@@ -172,7 +178,8 @@ async def scrape_google_maps(query, item_limit=20):
                         addr_element = detail.locator('button[data-item-id="address"]')
                         if await addr_element.count() > 0:
                             address = await addr_element.first.get_attribute('aria-label')
-                            address = address.replace("Address: ", "").strip()
+                            if address:
+                                address = address.replace("Address: ", "").strip()
                     except:
                         pass
 

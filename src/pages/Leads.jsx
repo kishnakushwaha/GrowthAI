@@ -345,11 +345,26 @@ const Leads = () => {
                     )}
                   </td>
                   <td>
-                    {lead.maps_url && (
-                      <a href={lead.maps_url} target="_blank" rel="noreferrer" className="maps-link" title="Open in Google Maps">
-                        <ExternalLink size={16} />
-                      </a>
-                    )}
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      {lead.maps_url && (
+                        <a href={lead.maps_url} target="_blank" rel="noreferrer" className="maps-link" title="Open in Google Maps">
+                          <ExternalLink size={16} />
+                        </a>
+                      )}
+                      <button 
+                        className="email-action-btn"
+                        title="Send Email"
+                        onClick={() => {
+                          // Email is handled by audit engine usually, but we fallback to empty if missing
+                          const targetEmail = lead.email && lead.email !== 'N/A' ? lead.email : '';
+                          const businessName = lead.place_name || '';
+                          window.location.hash = `#emails?email=${encodeURIComponent(targetEmail)}&business=${encodeURIComponent(businessName)}`;
+                        }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', padding: '4px', borderRadius: '4px' }}
+                      >
+                        <Mail size={16} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

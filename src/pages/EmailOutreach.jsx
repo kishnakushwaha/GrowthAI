@@ -75,6 +75,38 @@ const EmailOutreach = () => {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
+  // Handle incoming lead data from URL hash parameters
+  useEffect(() => {
+    const handlePopulateFromURL = () => {
+      const hash = window.location.hash;
+      if (hash.includes('emails?')) {
+        const queryParams = new URLSearchParams(hash.split('?')[1]);
+        const email = queryParams.get('email');
+        const business = queryParams.get('business');
+        
+        if (email) setComposeTo(email);
+        if (business) {
+          setComposeBusiness(business);
+          setComposeVars(prev => {
+            const updated = { ...prev, business_name: business };
+            if (rawTemplate.subject) {
+              setComposeSubject(rawTemplate.subject.replace(/{{business_name}}/g, business));
+            }
+            return updated;
+          });
+        }
+        
+        // Remove the query parameters from URL without refreshing or changing section
+        window.history.replaceState(null, '', window.location.pathname + '#emails');
+      }
+    };
+    
+    handlePopulateFromURL();
+    // Also listen for changes in case they click multiple leads sequentially
+    window.addEventListener('hashchange', handlePopulateFromURL);
+    return () => window.removeEventListener('hashchange', handlePopulateFromURL);
+  }, [rawTemplate]);
+
   // Configure SMTP — now with proper error display
   const handleConfigureSmtp = async () => {
     if (!configEmail || !configPassword) return;
