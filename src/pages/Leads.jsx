@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Search, Download, Filter, Flame, Globe, Phone, MapPin, Star, 
   ExternalLink, Loader2, PlayCircle, X, ChevronLeft, ChevronRight,
-  BarChart3, Users, AlertTriangle, TrendingUp
+  BarChart3, Users, AlertTriangle, TrendingUp, Mail
 } from 'lucide-react';
 import './Leads.css';
 

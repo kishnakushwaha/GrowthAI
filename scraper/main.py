@@ -3,7 +3,7 @@ import re
 import sys
 import urllib.parse
 from playwright.async_api import async_playwright
-from database import init_db, save_lead, export_to_csv
+from database import init_db, save_lead, export_to_csv, supabase
 
 async def scrape_google_maps(query, item_limit=20):
     print(f"🚀 Starting scraper for: '{query}'")
@@ -20,8 +20,7 @@ async def scrape_google_maps(query, item_limit=20):
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
                 '--no-first-run',
-                '--no-zygote',
-                '--single-process' # Saves RAM on Free Tier
+                '--no-zygote'
             ]
         )
         context = await browser.new_context(
@@ -31,14 +30,12 @@ async def scrape_google_maps(query, item_limit=20):
         
         search_url = f"https://www.google.com/maps/search/{urllib.parse.quote(query)}/?hl=en"
         print(f"🔗 Navigating to: {search_url}")
-        await page.goto(search_url)
+        await page.goto(search_url, wait_until='domcontentloaded', timeout=60000)
         
         print("⏳ Waiting for results to load (max 60s)...")
         try:
-            # Try multiple possible selectors as Google Maps layout varies
             feed_selectors = [
                 'div[role="feed"]',
-                'div.m67q60-m67q60-ia-p', # Sometimes used for the list
                 'div[aria-label^="Results for"]',
                 'div[role="main"]'
             ]
@@ -55,7 +52,6 @@ async def scrape_google_maps(query, item_limit=20):
             if not found:
                 print("⚠️ Still waiting, taking a screenshot to debug...")
                 await page.screenshot(path="scraper_debug.png")
-                # Final attempt with longer timeout on primary selector
                 await page.wait_for_selector('div[role="feed"]', timeout=45000)
                 print("✅ Found results feed after extra wait.")
         except Exception as e:
@@ -71,11 +67,8 @@ async def scrape_google_maps(query, item_limit=20):
         print("🔍 Starting extraction loop...")
 
         while extracted_count < item_limit and scroll_attempts < 15:
-            # Re-locate the feed on every iteration to keep it fresh
-            # Locator fallbacks
             place_links = await page.locator('a[href*="/maps/place/"]').all()
             if not place_links:
-                # Try fallback list-item selector if maps/place doesn't work
                 place_links = await page.locator('div.q2oYwe a').all()
 
             print(f"📍 Found {len(place_links)} potential business links on current view (Attempt {scroll_attempts+1})")
@@ -84,7 +77,6 @@ async def scrape_google_maps(query, item_limit=20):
                 print("⚠️ No links found, maybe Google is blocking? Taking screenshot.")
                 await page.screenshot(path="no_links_debug.png")
 
-            # Try to grab what we can without over-scrolling first
             for link in place_links:
                 if extracted_count >= item_limit:
                     break
@@ -93,93 +85,97 @@ async def scrape_google_maps(query, item_limit=20):
                 if not url:
                     continue
                 
-                # Google Maps heavily modifies the href with live coordinates /@lat,lng or /data= as you scroll
+                # Normalize URL to prevent false duplicates from coordinate changes
                 clean_url = url.split('?')[0].split('/data=')[0].split('/@')[0]
                 if clean_url in processed_urls:
                     continue
                 processed_urls.add(clean_url)
                 
                 try:
-                    # ---- BUSINESS NAME (Pre-Click) ----
-                    # Extract the business name directly from the link's aria-label BEFORE doing anything
+                    # ---- BUSINESS NAME (Pre-Click from aria-label) ----
                     name = await link.get_attribute('aria-label')
-                    if not name or name == "Results":
+                    if not name or name.strip() == "" or name == "Results":
                         continue
+                    name = name.strip()
                         
-                    # Huge Speed Optimization: Check CRM BEFORE we waste clicking and waiting
-                    from database import supabase
+                    # Fast duplicate check BEFORE clicking (saves ~10s per duplicate)
                     result = supabase.table('businesses').select('id').eq('place_name', name).execute()
                     if result.data:
                         print(f"⏭️ Skipped duplicate: {name} (Already in CRM)")
                         continue
                         
-                    # Scroll exactly to the link so it's clickable
                     await link.scroll_into_view_if_needed()
                     print(f"👉 Extracting lead {extracted_count + 1}...")
                     
-                    # We only click if it's a new lead
                     await link.click()
                     
-                    # Fast timeout for sidebar wait, waiting specifically for the DOM to update to the new content
+                    # Wait for sidebar to fully load with the NEW business data
                     try:
                         detail = page.locator('div[role="main"]').last
-                        # Force Playwright to wait until the h1 ACTUALLY updates to the new business name
-                        await detail.locator('h1', has_text=re.compile(re.escape(name[:15]), re.IGNORECASE)).first.wait_for(timeout=8000)
-                        await page.wait_for_timeout(2000) # Give React time to swap the phone number and website
+                        # Wait for the h1 to match our expected name (confirms panel swapped)
+                        safe_name_prefix = re.escape(name[:20])
+                        await detail.locator('h1', has_text=re.compile(safe_name_prefix, re.IGNORECASE)).first.wait_for(timeout=8000)
+                        # Extra wait for phone/website/address to render (they load AFTER the title)
+                        await page.wait_for_timeout(2500)
                     except:
-                        # Fallback pause if strict text match fails 
-                        await page.wait_for_timeout(3000)
+                        # If name match fails, just give it a generous flat wait
+                        await page.wait_for_timeout(4000)
+                        detail = page.locator('div[role="main"]').last
 
-                    # ---- RATING & REVIEWS ----
+                    # ---- RATING & REVIEWS (aria-label based, not class names) ----
                     rating = "N/A"
                     reviews = "0"
                     try:
-                        # Improved rating locator
-                        rating_span = detail.locator('span.ceNzR').first
-                        if await rating_span.count() > 0:
-                            rating_text = await rating_span.get_attribute('aria-label')
-                            # e.g. "4.5 stars"
-                            rating = re.search(r'\d\.\d', rating_text).group(0) if re.search(r'\d\.\d', rating_text) else "N/A"
+                        # Rating: look for any span with aria-label matching "X.X stars" pattern
+                        rating_els = detail.locator('span[aria-label]')
+                        count = await rating_els.count()
+                        for i in range(min(count, 20)):
+                            aria = await rating_els.nth(i).get_attribute('aria-label')
+                            if aria and 'star' in aria.lower():
+                                match = re.search(r'(\d\.?\d?)\s*star', aria, re.IGNORECASE)
+                                if match:
+                                    rating = match.group(1)
+                                    break
                         
-                        review_span = detail.locator('span.jANrl').first
-                        if await review_span.count() > 0:
-                            review_text = await review_span.inner_text()
-                            # e.g. "(1,234)"
-                            reviews = review_text.replace('(', '').replace(')', '').replace(',', '').strip()
+                        # Reviews: look for span with aria-label matching "X reviews" pattern
+                        for i in range(min(count, 20)):
+                            aria = await rating_els.nth(i).get_attribute('aria-label')
+                            if aria and 'review' in aria.lower():
+                                match = re.search(r'([\d,]+)\s*review', aria, re.IGNORECASE)
+                                if match:
+                                    reviews = match.group(1).replace(',', '')
+                                    break
                     except:
                         pass
                     
-                    # ---- EMAIL ----
-                    email = "N/A"
-
-                    # ---- PHONE ----
+                    # ---- PHONE (data-item-id is stable) ----
                     phone = "N/A"
                     try:
-                        phone_elements = detail.locator('button[data-item-id^="phone:tel:"]')
-                        if await phone_elements.count() > 0:
-                            phone = await phone_elements.first.get_attribute('aria-label')
-                            if phone:
-                                phone = phone.replace("Phone: ", "").strip()
+                        phone_btn = detail.locator('button[data-item-id^="phone:tel:"]')
+                        if await phone_btn.count() > 0:
+                            phone_aria = await phone_btn.first.get_attribute('aria-label')
+                            if phone_aria:
+                                phone = phone_aria.replace("Phone: ", "").strip()
                     except:
                         pass
                         
-                    # ---- WEBSITE ----
+                    # ---- WEBSITE (data-item-id is stable) ----
                     website = "N/A"
                     try:
-                        website_element = detail.locator('a[data-item-id="authority"]')
-                        if await website_element.count() > 0:
-                            website = await website_element.first.get_attribute('href')
+                        web_el = detail.locator('a[data-item-id="authority"]')
+                        if await web_el.count() > 0:
+                            website = await web_el.first.get_attribute('href')
                     except:
                         pass
                         
-                    # ---- ADDRESS ----
+                    # ---- ADDRESS (data-item-id is stable) ----
                     address = "N/A"
                     try:
-                        addr_element = detail.locator('button[data-item-id="address"]')
-                        if await addr_element.count() > 0:
-                            address = await addr_element.first.get_attribute('aria-label')
-                            if address:
-                                address = address.replace("Address: ", "").strip()
+                        addr_btn = detail.locator('button[data-item-id="address"]')
+                        if await addr_btn.count() > 0:
+                            addr_aria = await addr_btn.first.get_attribute('aria-label')
+                            if addr_aria:
+                                address = addr_aria.replace("Address: ", "").strip()
                     except:
                         pass
 
@@ -203,7 +199,7 @@ async def scrape_google_maps(query, item_limit=20):
                         extracted_count += 1
                         
                 except Exception as e:
-                    print(f"Error extracting an item: {str(e)[:80]}")
+                    print(f"Error extracting an item: {str(e)[:120]}")
                     pass
 
             try:
@@ -224,3 +220,4 @@ if __name__ == "__main__":
     query = sys.argv[1] if len(sys.argv) > 1 else "Dentist in Delhi"
     count = int(sys.argv[2]) if len(sys.argv) > 2 else 10
     asyncio.run(scrape_google_maps(query, item_limit=count))
+
