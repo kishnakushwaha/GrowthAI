@@ -17,80 +17,31 @@ export function renderTemplate(template, variables) {
 
 async function seedTemplates() {
   try {
-    const { data, error } = await supabase.from('email_templates').select('id').limit(1);
-    if (error) {
-      console.warn('⚠️ Could not check email_templates table (migration may be missing). Skipping seeding.');
-      return;
-    }
-    if (data && data.length > 0) return; // Already seeded
-
     const templates = [
       {
         name: 'Website Audit Intro',
         subject: "Quick question about {{business_name}}'s online presence",
-        body: `Hi {{contact_name}},
-
-I came across {{business_name}} while researching businesses in {{city}} and noticed a few things about your online presence that could be costing you customers.
-
-I ran a quick free audit on your website and found some issues:
-• Your site scores {{audit_score}}/100 on our SEO analysis
-• {{critical_count}} critical issues were found
-• There are quick wins that could dramatically improve your Google ranking
-
-You can see the full report here: {{audit_link}}
-
-I help businesses like yours get 20-50 new leads per month through AI-powered Google ranking and targeted ads. Would a quick 10-minute call be helpful?
-
-Best regards,
-GrowthAI Engine Team
-📞 +91 87439 33258`
+        body: `Hi {{contact_name}},\n\nI came across {{business_name}} while researching businesses in {{city}} and noticed a few things about your online presence that could be costing you customers.\n\nI ran a quick free audit on your website and found some issues:\n• Your site scores {{audit_score}}/100 on our SEO analysis\n• {{critical_count}} critical issues were found\n• There are quick wins that could dramatically improve your Google ranking\n\nYou can see the full report here: {{audit_link}}\n\nI help businesses like yours get 20-50 new leads per month through AI-powered Google ranking and targeted ads. Would a quick 10-minute call be helpful?\n\nBest regards,\nGrowthAI Engine Team\n📞 +91 87439 33258`
       },
       {
         name: 'Follow-Up (Day 3)',
         subject: "Re: Your website audit results for {{business_name}}",
-        body: `Hi {{contact_name}},
-
-Just following up on the website audit I sent earlier for {{business_name}}.
-
-I noticed your competitors in {{city}} are already investing in their online presence. Here's what they're doing differently:
-✅ Proper SEO optimization (showing up on Google page 1)
-✅ Mobile-friendly, fast-loading websites
-✅ Active Google Business Profile with reviews
-
-The good news? Most of these fixes are straightforward — and we can handle everything for you.
-
-Our Starter package begins at just ₹8,000/month and includes:
-→ Google Business Profile optimization
-→ Basic local SEO
-→ Monthly performance report
-
-Want to chat for 10 minutes this week? I'm happy to walk you through our approach.
-
-Best,
-GrowthAI Engine Team`
+        body: `Hi {{contact_name}},\n\nJust following up on the website audit I sent earlier for {{business_name}}.\n\nI noticed your competitors in {{city}} are already investing in their online presence. Here's what they're doing differently:\n✅ Proper SEO optimization (showing up on Google page 1)\n✅ Mobile-friendly, fast-loading websites\n✅ Active Google Business Profile with reviews\n\nThe good news? Most of these fixes are straightforward — and we can handle everything for you.\n\nOur Starter package begins at just ₹8,000/month and includes:\n→ Google Business Profile optimization\n→ Basic local SEO\n→ Monthly performance report\n\nWant to chat for 10 minutes this week? I'm happy to walk you through our approach.\n\nBest,\nGrowthAI Engine Team`
       },
       {
         name: 'Social Proof (Day 7)',
         subject: "{{business_name}} — Last thought from us",
-        body: `Hi {{contact_name}},
-
-This is my last follow-up, so I'll keep it brief.
-
-We recently helped a {{industry}} business in Delhi go from 0 to 30+ leads per month in just 60 days. Their Google ranking went from page 5 to page 1 for their main keywords.
-
-If growing {{business_name}}'s online presence is a priority for you this year, I'd love to show you exactly how we'd do it — no obligation.
-
-Book a free strategy call: https://wa.me/918743933258
-
-If the timing isn't right, no worries at all. Wishing {{business_name}} all the best!
-
-Cheers,
-GrowthAI Engine Team`
+        body: `Hi {{contact_name}},\n\nThis is my last follow-up, so I'll keep it brief.\n\nWe recently helped a {{industry}} business in Delhi go from 0 to 30+ leads per month in just 60 days. Their Google ranking went from page 5 to page 1 for their main keywords.\n\nIf growing {{business_name}}'s online presence is a priority for you this year, I'd love to show you exactly how we'd do it — no obligation.\n\nBook a free strategy call: https://wa.me/918743933258\n\nIf the timing isn't right, no worries at all. Wishing {{business_name}} all the best!\n\nCheers,\nGrowthAI Engine Team`
       }
     ];
 
-    await supabase.from('email_templates').insert(templates);
-    console.log('✅ Default email templates seeded to Supabase');
+    for (const t of templates) {
+      const { data } = await supabase.from('email_templates').select('id').eq('name', t.name).limit(1);
+      if (!data || data.length === 0) {
+        await supabase.from('email_templates').insert(t);
+        console.log(`✅ Seeded template: ${t.name}`);
+      }
+    }
   } catch (err) {
     console.error('Template seeding failed:', err.message);
   }
