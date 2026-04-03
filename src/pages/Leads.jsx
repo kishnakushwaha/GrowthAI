@@ -100,8 +100,23 @@ const Leads = () => {
     }
   };
 
-  const exportCSV = () => {
-    window.open(`${API}/api/leads/export?token=${token}`, '_blank');
+  const exportCSV = async () => {
+    try {
+      const res = await fetch(`${API}/api/leads/export`, { headers });
+      if (!res.ok) throw new Error('Export failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'leads_export.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Export failed:', err);
+      alert('Export failed. Please try again.');
+    }
   };
 
   const handleSort = (field) => {
