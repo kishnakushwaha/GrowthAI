@@ -80,4 +80,16 @@ async function pushLocalAuth() {
   }
 }
 
-module.exports = { pullLocalAuth, pushLocalAuth };
+// Clear the auth from Supabase and delete the local folder
+async function clearLocalAuth() {
+  if (supabase) {
+    console.log('[SupabaseAuth] Clearing remote auth session...');
+    await supabase.from('whatsapp_sessions').delete().eq('id', 'primary');
+  }
+  if (fs.existsSync(AUTH_FOLDER)) {
+    console.log('[SupabaseAuth] Deleting local auth folder...');
+    fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
+  }
+}
+
+module.exports = { pullLocalAuth, pushLocalAuth, clearLocalAuth };

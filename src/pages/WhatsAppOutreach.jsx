@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   MessageCircle, Send, Settings, FileText, Users, Eye, MousePointer, AlertCircle,
-  Loader2, ChevronDown, ChevronUp, Edit3, Plus, X, Check, Smartphone, Activity
+  Loader2, ChevronDown, ChevronUp, Edit3, Plus, X, Check, Smartphone, Activity, WifiOff
 } from 'lucide-react';
 import { WA_API } from '../config';
 import './WhatsAppOutreach.css';
@@ -234,6 +234,22 @@ const WhatsAppOutreach = () => {
     }
   };
 
+  const handleDisconnect = async () => {
+    if (!window.confirm("Are you sure you want to disconnect the WhatsApp engine? You will need to re-scan the QR code to link your device again.")) return;
+    
+    // Optimistically update UI
+    setEngineConnected(false);
+    
+    try {
+      await fetch(`${WA_API}/api/wa/disconnect`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (e) {
+      console.error("Disconnect API failed:", e);
+    }
+  };
+
   const handleSaveEdit = () => {
     if (!editingTemplate.name || !editingTemplate.body) return;
     const updated = templates.map(t => t.id === editingTemplate.id ? editingTemplate : t);
@@ -264,11 +280,28 @@ const WhatsAppOutreach = () => {
           <p className="text-muted">Direct high-conversion messaging with fully automated API engine</p>
         </div>
         
-        <div className="wa-connection-shield">
+        <div className="wa-connection-shield" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
           {engineConnected ? (
-            <div className="badge success">
-              <Activity size={14} className="pulse-icon" /> Engine Connected
-            </div>
+            <>
+              <div className="badge success" title="Background Agent is Online">
+                <Activity size={14} className="pulse-icon" /> Engine Connected
+              </div>
+              <button 
+                className="btn-text" 
+                onClick={handleDisconnect}
+                title="Disconnect from WhatsApp"
+                style={{ 
+                  fontSize: '0.85rem', color: '#ef4444', display: 'flex', alignItems: 'center', 
+                  gap: '0.35rem', padding: '0.4rem 0.75rem', background: 'rgba(239, 68, 68, 0.1)', 
+                  borderRadius: '20px', border: '1px solid rgba(239, 68, 68, 0.2)', cursor: 'pointer', 
+                  transition: 'all 0.2s', fontWeight: '500' 
+                }}
+                onMouseOver={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)'}
+                onMouseOut={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'}
+              >
+                <WifiOff size={14} /> Disconnect
+              </button>
+            </>
           ) : engineQr ? (
             <div className="badge warning">
               <AlertCircle size={14} /> Engine Disconnected (Manual Fallback)

@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { Client, LocalAuth } = require('whatsapp-web.js');
-const { pullLocalAuth, pushLocalAuth } = require('./supabaseAuth');
+const { pullLocalAuth, pushLocalAuth, clearLocalAuth } = require('./supabaseAuth');
 const qrcode = require('qrcode-terminal');
 
 const app = express();
@@ -107,6 +107,40 @@ app.post('/api/wa/send', async (req, res) => {
     res.json({ success: true, message: 'Message queued to WhatsApp' });
   } catch (error) {
     console.error('[WA] Send error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 4. Disconnect Endpoint
+app.post('/api/wa/disconnect', async (req, res) => {
+  try {
+    console.log('[WA] Disconnection/Logout requested...');
+    isReady = false;
+    currentQr = null;
+    
+    if (waClient) {
+      // Catch any errors from Chromium if it's already dead
+      try {
+        await waClient.logout();
+        await waClient.destroy();
+      } catch(e) {
+        console.log('[WA] Client logout/destroy error (safe to ignore):', e.message);
+      }
+    }
+    
+    // Wipe auth completely
+    await clearLocalAuth();
+    
+    res.json({ success: true, message: 'Disconnected successfully.' });
+    
+    // Reboot the service so a new fresh QR code is generated!
+    setTimeout(() => {
+      console.log('[WA] Rebooting fresh WhatsApp Engine instance...');
+      startWhatsApp();
+    }, 3000);
+    
+  } catch (error) {
+    console.error('[WA] Disconnect error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
