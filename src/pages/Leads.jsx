@@ -438,22 +438,34 @@ const Leads = () => {
                           const targetPhone = lead.phone && lead.phone !== 'N/A' ? lead.phone : '';
                           const businessName = lead.place_name || '';
                           
-                          // Smart City Extraction
+                          // Improved Smart City Extraction
                           const findCity = (addr, ind) => {
-                            if (!addr || addr === 'N/A') return '';
-                            // Priority 1: Check if city is in industry (e.g. "Dentists in Delhi")
-                            const commonCities = ['Delhi', 'Noida', 'Gurgaon', 'Mumbai', 'Bangalore', 'Pune', 'Hyderabad', 'Chennai', 'Kolkata', 'Jaipur', 'Lucknow', 'Ahmedabad', 'Chandigarh'];
+                            const combined = `${addr || ''} ${ind || ''}`.toLowerCase();
+                            
+                            // 1. High Priority: Explicit Indian Cities
+                            const commonCities = [
+                              'Delhi', 'Noida', 'Gurgaon', 'Mumbai', 'Bangalore', 'Pune', 'Hyderabad', 
+                              'Chennai', 'Kolkata', 'Jaipur', 'Lucknow', 'Ahmedabad', 'Chandigarh',
+                              'Prayagraj', 'Allahabad', 'Varanasi', 'Kanpur', 'Agra', 'Indore', 'Bhopal'
+                            ];
+                            
                             for (const c of commonCities) {
-                              if (ind?.toLowerCase().includes(c.toLowerCase())) return c;
+                              if (combined.includes(c.toLowerCase())) return c;
                             }
-                            // Priority 2: Extract from Address (usually before state/zip or at the end)
+
+                            // 2. Medium Priority: Extract word after "in " (e.g. "Dentists in Prayagraj")
+                            const inMatch = ind?.match(/in\s+([A-Z][a-z]+)/);
+                            if (inMatch) return inMatch[1];
+                            
+                            // 3. Fallback: Parse from Address
+                            if (!addr || addr === 'N/A') return 'your city';
                             const parts = addr.split(',').map(s => s.trim());
                             if (parts.length >= 2) {
-                              // Often city is the 2nd to last or 3rd to last part
+                              // Often city is the 2nd to last part (before State/Zip)
                               const possible = parts[parts.length - 2]; 
-                              if (possible && !/^\d+$/.test(possible)) return possible;
+                              if (possible && !/^\d+$/.test(possible) && possible.length > 2) return possible;
                             }
-                            return parts[0]; // Fallback to first part
+                            return parts[0]; 
                           };
 
                           const cityName = findCity(lead.address, lead.industry);

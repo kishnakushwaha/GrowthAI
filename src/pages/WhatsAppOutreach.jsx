@@ -111,7 +111,7 @@ const WhatsAppOutreach = () => {
         
         // Initial render with all vars
         const initialVars = {
-           contact_name: extractFirstName(business) || 'Team',
+           contact_name: extractFormalName(business) || 'Team',
            business_name: business || '',
            city: city || 'your city'
         };
@@ -138,21 +138,29 @@ const WhatsAppOutreach = () => {
     localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(newTpls));
   };
 
-  const extractFirstName = (bizName) => {
+  const extractFormalName = (bizName) => {
     if (!bizName) return '';
-    const parts = bizName.split(/[\s'|,-]+/);
-    const firstWord = parts[0];
-    const generics = ['the', 'sri', 'shree', 'jai', 'dr', 'mr', 'mrs', 'new', 'best', 'top', 'super', 'a', 'an'];
-    if (generics.includes(firstWord.toLowerCase()) || firstWord.length <= 2) {
-      return `Team at ${bizName}`;
+    // 1. Cut off at special characters (brackets, dash, pipe, etc.)
+    let name = bizName.split(/[\(\-\|]/)[0].trim();
+    
+    // 2. Remove titles/prefixes
+    const prefixes = ['mr.', 'dr.', 'ms.', 'mrs.', 'shree', 'sri', 'jai', 'the', 'best'];
+    let words = name.split(/\s+/);
+    
+    // Remove if first word is a prefix
+    if (words.length > 0 && prefixes.includes(words[0].toLowerCase())) {
+      words.shift();
     }
-    return firstWord.charAt(0).toUpperCase() + firstWord.slice(1).toLowerCase();
+    
+    // 3. Take first 3 words max
+    const result = words.slice(0, 3).join(' ');
+    return result || 'Team';
   };
 
   const getAutoVars = (name, business, city) => ({
-    contact_name: name || extractFirstName(business) || 'Team',
+    contact_name: name || extractFormalName(business) || 'Team',
     business_name: business || '',
-    city: city || 'Delhi'
+    city: city || 'your city'
   });
 
   const rerenderFromTemplate = (newVars) => {
