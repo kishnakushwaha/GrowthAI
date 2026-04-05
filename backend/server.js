@@ -826,7 +826,7 @@ app.get('/api/wa/enrollments', requireAuth, async (req, res) => {
 });
 
 // GET /api/wa/stats — Aggregated Dashboard Numbers
-app.get('/api/wa/stats', requireAuth, async (req, res) => {
+app.get('/api/wa/stats', async (req, res) => {
   try {
     const { data: logs } = await supabase.from('wa_logs').select('status');
     const { data: enrolls } = await supabase.from('wa_enrollments').select('id').eq('status', 'active');
@@ -845,7 +845,7 @@ app.get('/api/wa/stats', requireAuth, async (req, res) => {
 });
 
 // GET /api/wa/logs — History Log
-app.get('/api/wa/logs', requireAuth, async (req, res) => {
+app.get('/api/wa/logs', async (req, res) => {
   try {
     const { data, error } = await supabase
       .from('wa_logs')
