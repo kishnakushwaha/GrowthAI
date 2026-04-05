@@ -81,17 +81,45 @@ const Leads = () => {
     fetchEnrollments();
   }, [fetchLeads]);
 
-  const toggleSequence = async (lead) => {
+  const startWASequence = async (lead) => {
+    if (!lead.phone || lead.phone === 'N/A') {
+      alert("This lead doesn't have a valid phone number.");
+      return;
+    }
     setActionLoading(lead.id);
     try {
-      const isEnrolled = !!enrollments[lead.id];
-      const endpoint = isEnrolled ? `${API}/api/wa/stop` : `${API}/api/wa/enroll`;
-      await fetch(endpoint, {
+      const res = await fetch(`${API}/api/wa/enroll`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ lead_id: lead.id })
+        body: JSON.stringify({ 
+          lead_id: lead.id,
+          phone: lead.phone,
+          biz_name: lead.place_name,
+          city: lead.city // City extraction handled by the findCity logic elsewhere
+        })
       });
-      await fetchEnrollments();
+      const data = await res.json();
+      if (data.success) {
+        await fetchEnrollments();
+      } else {
+        alert(data.error || "Failed to start sequence.");
+      }
+    } catch (err) { console.error(err); }
+    setActionLoading(null);
+  };
+
+  const stopWASequence = async (leadId) => {
+    setActionLoading(leadId);
+    try {
+      const res = await fetch(`${API}/api/wa/stop`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ lead_id: leadId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        await fetchEnrollments();
+      }
     } catch (err) { console.error(err); }
     setActionLoading(null);
   };

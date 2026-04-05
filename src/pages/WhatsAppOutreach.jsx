@@ -54,8 +54,9 @@ const WhatsAppOutreach = () => {
     
     const fetchStats = async () => {
       try {
+        const token = sessionStorage.getItem('adminToken');
         const res = await fetch(`${WA_API}/api/wa/stats`, { 
-          headers: { 'Authorization': `Bearer ${localStorage.getItem('admin_token')}` } 
+          headers: { 'Authorization': `Bearer ${token}` } 
         });
         const data = await res.json();
         setWaStats(data);
@@ -74,7 +75,7 @@ const WhatsAppOutreach = () => {
   const fetchLogs = async () => {
     setLogsLoading(true);
     try {
-      const token = localStorage.getItem('admin_token');
+      const token = sessionStorage.getItem('adminToken');
       const res = await fetch(`${WA_API}/api/wa/logs`, { 
         headers: { 'Authorization': `Bearer ${token}` } 
       });
@@ -300,7 +301,7 @@ const WhatsAppOutreach = () => {
       setSending(true);
       setSendResult(null);
       try {
-        const token = localStorage.getItem('admin_token');
+        const token = sessionStorage.getItem('adminToken');
         const res = await fetch(`${WA_API}/api/wa/send`, {
           method: 'POST',
           headers: { 
