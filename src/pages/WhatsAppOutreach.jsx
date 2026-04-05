@@ -213,14 +213,18 @@ const WhatsAppOutreach = () => {
   const rerenderFromTemplate = (newVars) => {
     if (rawTemplate.body) {
       let bdy = rawTemplate.body;
+      // Merge current state to ensure no partial renders
       const vars = {
-        contact_name: newVars.contact_name || composeToName,
-        business_name: newVars.business_name || composeBusiness,
-        city: newVars.city || composeVars.city
+        contact_name: newVars.contact_name !== undefined ? newVars.contact_name : composeToName,
+        business_name: newVars.business_name !== undefined ? newVars.business_name : composeBusiness,
+        city: newVars.city !== undefined ? newVars.city : (composeVars.city || 'your city'),
+        ...newVars // Catch any other custom variables
       };
       
       for (const [k, v] of Object.entries(vars)) {
-        bdy = bdy.replace(new RegExp(`\\[\\[${k}\\]\\]`, 'gi'), v);
+        if (v !== undefined) {
+          bdy = bdy.replace(new RegExp(`\\[\\[${k}\\]\\]`, 'gi'), v);
+        }
       }
       setComposeBody(bdy);
     }
@@ -229,8 +233,7 @@ const WhatsAppOutreach = () => {
   const handleNameChange = (val) => {
     setComposeToName(val);
     setComposeVars(prev => {
-      const updated = { ...prev };
-      if ('contact_name' in updated) updated.contact_name = val;
+      const updated = { ...prev, contact_name: val };
       rerenderFromTemplate(updated);
       return updated;
     });
@@ -239,8 +242,7 @@ const WhatsAppOutreach = () => {
   const handleBusinessChange = (val) => {
     setComposeBusiness(val);
     setComposeVars(prev => {
-      const updated = { ...prev };
-      if ('business_name' in updated) updated.business_name = val;
+      const updated = { ...prev, business_name: val };
       rerenderFromTemplate(updated);
       return updated;
     });
@@ -249,18 +251,27 @@ const WhatsAppOutreach = () => {
   const applyTemplate = (tpl) => {
     setSelectedTemplate(tpl);
     setRawTemplate({ body: tpl.body });
+    
+    // Extract variables using [[ ]] syntax
     const vars = {};
-    const matches = (tpl.body).match(/{{(\w+)}}/g) || [];
-    matches.forEach(m => { vars[m.replace(/[{}]/g, '')] = ''; });
-    const autoVars = getAutoVars(composeToName, composeBusiness);
+    const matches = (tpl.body).match(/\[\[(\w+)\]\]/g) || [];
+    matches.forEach(m => { 
+      vars[m.replace(/[\[\]]/g, '')] = ''; 
+    });
+
+    // Auto-fill from current input fields
+    const autoVars = getAutoVars(composeToName, composeBusiness, composeVars.city);
     for (const key of Object.keys(vars)) {
       if (autoVars[key]) vars[key] = autoVars[key];
     }
+    
     setComposeVars(vars);
+    
+    // Initial render of the body
     let bdy = tpl.body;
     for (const [key, value] of Object.entries(vars)) {
       if (value) {
-        bdy = bdy.replace(new RegExp(`{{${key}}}`, 'g'), value);
+        bdy = bdy.replace(new RegExp(`\\[\\[${key}\\]\\]`, 'gi'), value);
       }
     }
     setComposeBody(bdy);
