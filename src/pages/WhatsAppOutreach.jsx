@@ -350,8 +350,48 @@ const WhatsAppOutreach = () => {
   };
 
   return (
-    <div className="wa-outreach-container">
-      {/* Dashboard Stats — Matching Main Outreach (Email) */}
+    <div className="leads-container">
+      {/* 1. Header — Matching Email Outreach */}
+      <div className="leads-header">
+        <div>
+          <h1>WhatsApp <span className="text-wa-gradient">Outreach</span></h1>
+          <p className="text-muted">Direct high-conversion messaging with fully automated API engine</p>
+        </div>
+        <div className="leads-header-actions">
+          {engineConnected ? (
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+              <div className="smtp-connected-badge" style={{ margin: 0, background: 'rgba(34, 197, 94, 0.1)', color: '#22c55e', borderColor: 'rgba(34, 197, 94, 0.2)' }}>
+                <Activity size={14} className="pulse-icon" /> Engine Online
+              </div>
+              <button className="btn btn-secondary logout-btn" onClick={handleDisconnect} title="Disconnect WhatsApp">
+                <WifiOff size={16} /> Disconnect
+              </button>
+            </div>
+          ) : (
+            <div className="badge warning" style={{ padding: '8px 16px', borderRadius: '10px' }}>
+              <AlertCircle size={16} /> Engine Offline (Manual Mode)
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 2. QR Code Scanner (Conditional) */}
+      {engineQr && !engineConnected && (
+        <div className="scrape-panel glass-panel" style={{ border: '1px dashed #25D366', marginBottom: '2rem' }}>
+           <div style={{ display: 'flex', gap: '2rem', alignItems: 'center' }}>
+             <img src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(engineQr)}`} alt="Scan WhatsApp QR" style={{ borderRadius: '12px', border: '4px solid white', background: 'white' }} />
+             <div>
+               <h3 style={{ color: '#25D366' }}><Smartphone size={20} style={{ verticalAlign: 'middle', marginRight: '8px' }} /> Activate Automation Engine</h3>
+               <p className="text-muted" style={{ maxWidth: '600px', fontSize: '0.9rem', marginTop: '8px' }}>
+                 Open WhatsApp on your phone → Settings → Linked Devices → Scan QR Code. 
+                 This unlocks **100% automated follow-ups** and background sending.
+               </p>
+             </div>
+           </div>
+        </div>
+      )}
+
+      {/* 3. Stats Grid — Matching Email Outreach */}
       <div className="stats-grid">
         <div className="stat-card glass-panel">
           <Send size={24} color="var(--primary)" />
@@ -365,7 +405,7 @@ const WhatsAppOutreach = () => {
           <Activity size={24} color="var(--accent)" />
           <div>
             <span className="stat-number">{waStats.active}</span>
-            <span className="stat-label text-muted">Sequences Active</span>
+            <span className="stat-label text-muted">Active Sequences</span>
           </div>
         </div>
 
@@ -386,364 +426,186 @@ const WhatsAppOutreach = () => {
         </div>
       </div>
 
-      <div className="wa-header">
-        <div>
-          <h1>WhatsApp <span className="text-wa-gradient">Outreach</span></h1>
-          <p className="text-muted">Direct high-conversion messaging with fully automated API engine</p>
-        </div>
-        
-        <div className="wa-connection-shield" style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-          {engineConnected ? (
-            <>
-              <div className="badge success" title="Background Agent is Online">
-                <Activity size={14} className="pulse-icon" /> Engine Connected
-              </div>
-              <button 
-                className="btn-text" 
-                onClick={handleDisconnect}
-                title="Disconnect from WhatsApp"
-                style={{ 
-                  fontSize: '0.85rem', color: '#ef4444', display: 'flex', alignItems: 'center', 
-                  gap: '0.35rem', padding: '0.4rem 0.75rem', background: 'rgba(239, 68, 68, 0.1)', 
-                  borderRadius: '20px', border: '1px solid rgba(239, 68, 68, 0.2)', cursor: 'pointer', 
-                  transition: 'all 0.2s', fontWeight: '500' 
-                }}
-                onMouseOver={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)'}
-                onMouseOut={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'}
-              >
-                <WifiOff size={14} /> Disconnect
-              </button>
-            </>
-          ) : engineQr ? (
-            <div className="badge warning">
-              <AlertCircle size={14} /> Engine Disconnected (Manual Fallback)
-            </div>
-          ) : (
-            <>
-              <div className="badge" style={{ background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.3)' }}>
-                <Loader2 size={14} className="spin-icon" /> Engine Connecting...
-              </div>
-              <button 
-                className="btn-text" 
-                onClick={handleDisconnect}
-                title="Force Abort Connection"
-                style={{ 
-                  fontSize: '0.85rem', color: '#64748b', display: 'flex', alignItems: 'center', 
-                  gap: '0.35rem', padding: '0.4rem 0.75rem', background: 'transparent', 
-                  borderRadius: '20px', border: '1px solid rgba(100, 116, 139, 0.3)', cursor: 'pointer', 
-                  transition: 'all 0.2s', fontWeight: '500' 
-                }}
-                onMouseOver={(e) => e.currentTarget.style.background = 'rgba(100, 116, 139, 0.1)'}
-                onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
-              >
-                <X size={14} /> Cancel
-              </button>
-            </>
-          )}
-        </div>
+      {/* 4. Tabs — Matching Email Outreach */}
+      <div className="email-tabs">
+        <button className={`email-tab ${activeTab === 'compose' ? 'active' : ''}`} onClick={() => setActiveTab('compose')}>
+          <MessageCircle size={16} /> Compose
+        </button>
+        <button className={`email-tab ${activeTab === 'templates' ? 'active' : ''}`} onClick={() => setActiveTab('templates')}>
+          <FileText size={16} /> Templates
+        </button>
+        <button className={`email-tab ${activeTab === 'activity' ? 'active' : ''}`} onClick={() => setActiveTab('activity')}>
+          <Activity size={16} /> Activity Log
+        </button>
       </div>
 
-      {engineQr && !engineConnected && (
-        <div className="qr-container glass-panel" style={{ display: 'flex', gap: '2rem', padding: '1.5rem', alignItems: 'center', marginBottom: '1rem', border: '1px dashed #25D366' }}>
-           <img src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(engineQr)}`} alt="Scan WhatsApp QR" style={{ borderRadius: '8px', border: '4px solid white' }} />
-           <div>
-             <h3><Activity size={18} style={{ color: '#25D366', verticalAlign: 'middle', marginRight: '6px' }} /> Activate Automation Engine</h3>
-             <p className="text-muted" style={{ maxWidth: '500px', fontSize: '0.9rem', lineHeight: 1.5 }}>
-               Your dedicated background engine is currently asleep. Open WhatsApp on your phone, go to Linked Devices, and scan this QR code to unlock fully silent background batch sending.
-             </p>
-           </div>
-        </div>
-      )}
+      {/* 5. Content Panels */}
+      <div className="wa-content-area">
+        
+        {/* ---- COMPOSE TAB ---- */}
+        {activeTab === 'compose' && (
+          <div className="email-compose glass-panel">
+            <h3>💬 New WhatsApp Message</h3>
+            <p className="text-muted" style={{ marginBottom: '1.5rem', fontSize: '0.85rem' }}>
+              Fill recipient details, then pick a template — variables will auto-fill instantly!
+            </p>
 
-      <div className="wa-content">
-        <div className="wa-sidebar glass-panel">
-          
-          <div className="wa-tabs">
-            <button 
-              className={`wa-tab ${activeTab === 'compose' ? 'active' : ''}`}
-              onClick={() => setActiveTab('compose')}
-            >
-              <MessageCircle size={18} /> Compose
-            </button>
-            <button 
-              className={`wa-tab ${activeTab === 'templates' ? 'active' : ''}`}
-              onClick={() => setActiveTab('templates')}
-            >
-              <FileText size={18} /> Templates
-            </button>
-            <button 
-              className={`wa-tab ${activeTab === 'activity' ? 'active' : ''}`}
-              onClick={() => setActiveTab('activity')}
-            >
-              <Activity size={18} /> Activity Log
+            <div className="compose-fields" style={{ marginBottom: '1.5rem' }}>
+              <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 500 }}>Recipient Info:</label>
+              <div className="compose-row">
+                <input type="text" className="admin-input" placeholder="WhatsApp Phone *" value={composePhone} onChange={e => setComposePhone(e.target.value)} />
+                <input type="text" className="admin-input" placeholder="Contact Name" value={composeToName} onChange={e => handleNameChange(e.target.value)} />
+                <input type="text" className="admin-input" placeholder="Business Name" value={composeBusiness} onChange={e => handleBusinessChange(e.target.value)} />
+              </div>
+            </div>
+
+            <div className="template-selector">
+              <label>Select Template:</label>
+              <div className="template-chips">
+                <button className={`template-chip ${!selectedTemplate ? 'active' : ''}`} onClick={() => { setSelectedTemplate(null); setComposeBody(''); setComposeVars({}); setRawTemplate({ body: '' }); }}>
+                  Manual Message
+                </button>
+                {templates.map(t => (
+                  <button key={t.id} className={`template-chip ${selectedTemplate?.id === t.id ? 'active' : ''}`} onClick={() => applyTemplate(t)}>
+                    {t.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {Object.keys(composeVars).length > 0 && (
+              <div className="var-inputs">
+                <label>Dynamic Variables:</label>
+                <div className="var-grid">
+                  {Object.keys(composeVars).map(key => (
+                    <div key={key} className="var-field">
+                      <span className="var-label">{`[[${key}]]`}</span>
+                      <input type="text" className="admin-input" value={composeVars[key]} onChange={e => handleVarChange(key, e.target.value)} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="compose-fields" style={{ marginTop: '1rem' }}>
+              <textarea className="admin-input compose-body" placeholder="Type your WhatsApp message here..." rows={10} value={composeBody} onChange={e => setComposeBody(e.target.value)} />
+            </div>
+
+            {sendResult && (
+              <div className={`send-result ${sendResult.type === 'success' ? 'success' : 'error'}`} style={{ marginTop: '1rem' }}>
+                {sendResult.text}
+              </div>
+            )}
+
+            <button className="btn btn-primary" onClick={handleSend} disabled={sending || !composePhone} style={{ marginTop: '1.5rem', width: '220px' }}>
+              {sending ? <><Loader2 size={18} className="spin" /> Sending...</> : <><Send size={18} /> {engineConnected ? 'Send Automatically' : 'Open WhatsApp Web'}</>}
             </button>
           </div>
-          
-          <div className="wa-templates-panel">
-            <h3>Quick Templates</h3>
-            <div className="wa-template-list">
-              {templates.length === 0 && <p className="text-muted small">No templates found.</p>}
-              {templates.map(t => (
-                <div 
-                  key={t.id} 
-                  className={`wa-template-item ${selectedTemplate?.id === t.id ? 'active' : ''}`}
-                  onClick={() => {
-                    applyTemplate(t);
-                    setActiveTab('compose');
-                  }}
-                >
-                  <div className="wa-tpl-icon"><FileText size={14} /></div>
-                  <div className="wa-tpl-info">
-                    <h4>{t.name}</h4>
-                    <p>{t.body.substring(0, 30)}...</p>
+        )}
+
+        {/* ---- TEMPLATES TAB ---- */}
+        {activeTab === 'templates' && (
+          <div className="glass-panel" style={{ padding: '2rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <h3>📝 WhatsApp Templates</h3>
+              <button className="btn btn-primary" onClick={() => setNewTemplate({ name: '', body: '' })}>
+                <Plus size={16} /> New Template
+              </button>
+            </div>
+
+            {newTemplate && (
+              <div className="template-editor" style={{ marginBottom: '2rem', padding: '1.5rem', background: 'rgba(255,255,255,0.03)', borderRadius: '12px' }}>
+                <input type="text" className="admin-input" placeholder="Template Name" value={newTemplate.name} onChange={e => setNewTemplate({ ...newTemplate, name: e.target.value })} />
+                <textarea className="admin-input" rows={6} placeholder="Message (use [[variables]])" value={newTemplate.body} onChange={e => setNewTemplate({ ...newTemplate, body: e.target.value })} style={{ marginTop: '0.75rem' }} />
+                <div className="template-actions" style={{ marginTop: '1rem' }}>
+                  <button className="btn btn-primary" onClick={handleSaveNew}><Check size={16} /> Create</button>
+                  <button className="btn btn-secondary" onClick={() => setNewTemplate(null)}>Cancel</button>
+                </div>
+              </div>
+            )}
+
+            <div className="wa-templates-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
+              {templates.map(tpl => (
+                <div key={tpl.id} className="template-card">
+                  <div className="template-card-header">
+                    <h4>{tpl.name}</h4>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button className="icon-btn" onClick={() => setEditingTemplate({ ...tpl })}><Edit3 size={14} /></button>
+                      <button className="icon-btn danger" onClick={() => handleDeleteTemplate(tpl.id)}><X size={14} /></button>
+                    </div>
                   </div>
+                  {editingTemplate?.id === tpl.id ? (
+                    <div className="template-editor" style={{ marginTop: '1rem' }}>
+                      <input type="text" className="admin-input" value={editingTemplate.name} onChange={e => setEditingTemplate({ ...editingTemplate, name: e.target.value })} />
+                      <textarea className="admin-input" rows={4} value={editingTemplate.body} onChange={e => setEditingTemplate({ ...editingTemplate, body: e.target.value })} style={{ marginTop: '0.5rem' }} />
+                      <div className="template-actions" style={{ marginTop: '0.75rem' }}>
+                        <button className="btn btn-primary" onClick={() => {
+                           const updated = templates.map(t => t.id === editingTemplate.id ? editingTemplate : t);
+                           saveTemplates(updated);
+                           setEditingTemplate(null);
+                        }}><Check size={14} /> Save</button>
+                        <button className="btn btn-secondary" onClick={() => setEditingTemplate(null)}>Cancel</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <pre className="template-preview" style={{ maxHeight: '120px' }}>{tpl.body}</pre>
+                  )}
                 </div>
               ))}
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Main Content Area */}
-        <div className="wa-main-area">
-          
-          {/* ---- COMPOSE TAB ---- */}
-          {activeTab === 'compose' && (
-            <div className="wa-compose-panel glass-panel">
-              <div className="wa-panel-header">
-                <h2>New WhatsApp Message</h2>
-                {selectedTemplate && (
-                  <span className="wa-badge">Template: {selectedTemplate.name}</span>
-                )}
-              </div>
-
-              <div className="wa-form">
-                <div className="wa-form-row">
-                  <div className="wa-form-group">
-                    <label>WhatsApp Number</label>
-                    <div className="wa-input-with-icon">
-                      <Smartphone size={16} />
-                      <input 
-                        type="text" 
-                        placeholder="e.g. +91 98765 43210" 
-                        value={composePhone}
-                        onChange={e => setComposePhone(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                  <div className="wa-form-group">
-                    <label>Contact Name (Optional)</label>
-                    <input 
-                      type="text" 
-                      placeholder="e.g. Rahul" 
-                      value={composeToName}
-                      onChange={e => handleNameChange(e.target.value)}
-                    />
-                  </div>
-                </div>
-
-                <div className="wa-form-group">
-                  <label>Business Name (Optional)</label>
-                  <input 
-                    type="text" 
-                    placeholder="e.g. Acme Corp" 
-                    value={composeBusiness}
-                    onChange={e => handleBusinessChange(e.target.value)}
-                  />
-                </div>
-
-                {/* Variables Injector */}
-                {Object.keys(composeVars).length > 0 && (
-                  <div className="wa-variables-box">
-                    <h4>Template Variables</h4>
-                    <div className="wa-vars-grid">
-                      {Object.keys(composeVars).map(key => (
-                        <div key={key} className="wa-var-item">
-                          <label>{key.replace('_', ' ')}</label>
-                          <input 
-                            type="text" 
-                            value={composeVars[key]}
-                            onChange={(e) => handleVarChange(key, e.target.value)}
-                            placeholder={`Value for ${key}`}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="wa-form-group">
-                  <label>Message Content</label>
-                  <textarea 
-                    rows={8}
-                    className="wa-message-body"
-                    placeholder="Type your WhatsApp message..."
-                    value={composeBody}
-                    onChange={e => setComposeBody(e.target.value)}
-                  />
-                </div>
-
-                <div className="wa-form-actions">
-                  <button 
-                    className="wa-btn wa-btn-primary" 
-                    onClick={handleSend}
-                    disabled={!composePhone || !composeBody || sending}
-                  >
-                    {sending ? (
-                      <><Loader2 size={18} className="spin-icon" /> Sending...</>
-                    ) : engineConnected ? (
-                      <><Send size={18} /> Send Message Automatically</>
-                    ) : (
-                      <><Send size={18} /> Open in WhatsApp Web</>
-                    )}
-                  </button>
-                  <span className="wa-helper-text">
-                    {engineConnected 
-                      ? "Message will be sent silently in the background." 
-                      : "This will open a new tab directly into your WhatsApp Desktop/Web chat."}
-                  </span>
-                </div>
-              </div>
+        {/* ---- ACTIVITY LOG TAB ---- */}
+        {activeTab === 'activity' && (
+          <div className="leads-table-wrapper glass-panel">
+            <div className="wa-panel-header" style={{ padding: '1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h3>📈 Automation History</h3>
+              <button className="btn btn-secondary" onClick={fetchLogs}>
+                <Loader2 size={16} className={logsLoading ? 'spin' : ''} /> Refresh
+              </button>
             </div>
-          )}
-
-          {/* ---- TEMPLATES TAB ---- */}
-          {activeTab === 'templates' && (
-            <div className="wa-templates-manager glass-panel">
-              <div className="wa-panel-header">
-                <h2>Manage WhatsApp Templates</h2>
-                <button className="wa-btn wa-btn-secondary" onClick={() => setNewTemplate({ name: '', body: '' })}>
-                  <Plus size={16} /> Create Template
-                </button>
-              </div>
-
-              {/* Edit Existing Template */}
-              {editingTemplate && (
-                <div className="wa-editor-card">
-                  <h3>Edit Template</h3>
-                  <input 
-                    type="text" 
-                    value={editingTemplate.name}
-                    onChange={e => setEditingTemplate({...editingTemplate, name: e.target.value})}
-                    placeholder="Template Name"
-                  />
-                  <textarea 
-                    rows={6}
-                    value={editingTemplate.body}
-                    onChange={e => setEditingTemplate({...editingTemplate, body: e.target.value})}
-                    placeholder="Message Body (Use {{variable_name}} for dynamic data)"
-                  />
-                  <div className="wa-editor-actions">
-                    <button className="wa-btn wa-btn-primary" onClick={handleSaveEdit}>Save Changes</button>
-                    <button className="wa-btn wa-btn-ghost" onClick={() => setEditingTemplate(null)}>Cancel</button>
-                  </div>
-                </div>
-              )}
-
-              {/* Create New Template */}
-              {newTemplate && (
-                <div className="wa-editor-card new-card">
-                  <h3>New Template</h3>
-                  <input 
-                    type="text" 
-                    value={newTemplate.name}
-                    onChange={e => setNewTemplate({...newTemplate, name: e.target.value})}
-                    placeholder="Template Name (e.g. Cold Outreach #1)"
-                  />
-                  <textarea 
-                    rows={6}
-                    value={newTemplate.body}
-                    onChange={e => setNewTemplate({...newTemplate, body: e.target.value})}
-                    placeholder="Message Body (Use {{variable_name}} for dynamic data)"
-                  />
-                  <div className="wa-editor-actions">
-                    <button className="wa-btn wa-btn-primary" onClick={handleSaveNew}>Create</button>
-                    <button className="wa-btn wa-btn-ghost" onClick={() => setNewTemplate(null)}>Cancel</button>
-                  </div>
-                </div>
-              )}
-
-              <div className="wa-templates-grid">
-                {templates.map(t => (
-                  <div key={t.id} className="wa-template-card">
-                    <div className="wa-tc-header">
-                      <h3>{t.name}</h3>
-                      <div className="wa-tc-actions">
-                        <button className="icon-btn" onClick={() => {
-                          setEditingTemplate(t);
-                          setNewTemplate(null);
-                        }}><Edit3 size={16}/></button>
-                        <button className="icon-btn danger" onClick={() => handleDeleteTemplate(t.id)}><X size={16}/></button>
-                      </div>
-                    </div>
-                    <div className="wa-tc-body">
-                      {t.body}
-                    </div>
-                  </div>
+            <table className="leads-table">
+              <thead>
+                <tr>
+                  <th>RECIPIENT</th>
+                  <th>OUTREACH TYPE</th>
+                  <th>MESSAGE PREVIEW</th>
+                  <th>STATUS</th>
+                  <th>SENT AT</th>
+                </tr>
+              </thead>
+              <tbody>
+                {waLogs.length === 0 && !logsLoading && (
+                  <tr><td colSpan="5" className="text-center py-5">No logs found yet.</td></tr>
+                )}
+                {waLogs.map(log => (
+                  <tr key={log.id}>
+                    <td className="name-cell">
+                      <span className="lead-name">{log.biz_name || 'Individual'}</span>
+                      <span className="lead-industry text-muted">{log.phone}</span>
+                    </td>
+                    <td>
+                      <span className={`email-status-badge ${log.type === 'automation' ? 'status-sending' : 'status-sent'}`}>
+                        {log.type === 'automation' ? `Step ${log.step} Seq` : 'Manual Out'}
+                      </span>
+                    </td>
+                    <td style={{ maxWidth: '300px', overflow: 'hidden', textOverflow: 'ellipsis' }}>{log.message}</td>
+                    <td>
+                      <span className={`email-status-badge ${log.status === 'sent' ? 'status-sent' : 'status-failed'}`}>
+                        {log.status === 'sent' ? 'Delivered' : 'Failed'}
+                      </span>
+                    </td>
+                    <td className="text-muted" style={{ fontSize: '0.8rem' }}>
+                      {new Date(log.created_at).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                    </td>
+                  </tr>
                 ))}
-              </div>
-            </div>
-          )}
+              </tbody>
+            </table>
+          </div>
+        )}
 
-          {/* ---- ACTIVITY LOG TAB ---- */}
-          {activeTab === 'activity' && (
-            <div className="wa-activity-panel glass-panel">
-              <div className="wa-panel-header">
-                <h2>Message History <span className="badge" style={{ verticalAlign: 'middle', fontSize: '0.7em', marginLeft: '8px' }}>Tracking Engine Active</span></h2>
-                <button className="wa-btn wa-btn-ghost" onClick={fetchLogs}>
-                  <Loader2 size={16} className={logsLoading ? 'spin-icon' : ''} /> Refresh Logs
-                </button>
-              </div>
-
-              <div className="wa-activity-table-container">
-                <table className="wa-activity-table">
-                  <thead>
-                    <tr>
-                      <th>BUSINESS / RECIPIENT</th>
-                      <th>TYPE</th>
-                      <th>MESSAGE PREVIEW</th>
-                      <th>STATUS</th>
-                      <th>SENT AT</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {waLogs.length === 0 && !logsLoading && (
-                      <tr><td colSpan="5" className="text-center text-muted py-5">No logs found yet. Start sending to track!</td></tr>
-                    )}
-                    {waLogs.map(log => (
-                      <tr key={log.id}>
-                        <td>
-                          <div style={{ fontWeight: '600', color: '#f8fafc' }}>{log.biz_name || 'Individual'}</div>
-                          <div style={{ fontSize: '11px', color: '#94a3b8' }}>{log.phone}</div>
-                        </td>
-                        <td>
-                          <span className={`badge ${log.type === 'automation' ? 'info' : 'primary'}`} style={{ fontSize: '10px' }}>
-                            {log.type === 'automation' ? `STEP ${log.step} FOLLOW-UP` : 'DIRECT MESSAGE'}
-                          </span>
-                        </td>
-                        <td title={log.message}>
-                          <div style={{ maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '12px', color: '#cbd5e1' }}>
-                            {log.message}
-                          </div>
-                        </td>
-                        <td>
-                          <span className={`badge ${log.status === 'sent' ? 'success' : 'danger'}`} style={{ fontSize: '11px' }}>
-                            {log.status === 'sent' ? 'Sent Automatically' : 'Failed'}
-                          </span>
-                        </td>
-                        <td style={{ fontSize: '12px', color: '#94a3b8' }}>
-                          {new Date(log.created_at).toLocaleString('en-IN', {
-                            day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true
-                          })}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-        </div>
       </div>
     </div>
   );
