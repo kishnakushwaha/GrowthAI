@@ -74,12 +74,17 @@ const WhatsAppOutreach = () => {
   const fetchLogs = async () => {
     setLogsLoading(true);
     try {
+      const token = localStorage.getItem('admin_token');
       const res = await fetch(`${WA_API}/api/wa/logs`, { 
-        headers: { 'Authorization': `Bearer admin` } 
+        headers: { 'Authorization': `Bearer ${token}` } 
       });
       const data = await res.json();
-      setWaLogs(data.logs || []);
-    } catch (err) {}
+      if (data.logs) {
+        setWaLogs(data.logs || []);
+      }
+    } catch (err) {
+      console.error("Dashboard failed to load history:", err);
+    }
     setLogsLoading(false);
   };
 
