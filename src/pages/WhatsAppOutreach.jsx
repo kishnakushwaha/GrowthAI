@@ -307,9 +307,26 @@ const WhatsAppOutreach = () => {
               <AlertCircle size={14} /> Engine Disconnected (Manual Fallback)
             </div>
           ) : (
-            <div className="badge" style={{ background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.3)' }}>
-              <Loader2 size={14} className="spin-icon" /> Engine Connecting...
-            </div>
+            <>
+              <div className="badge" style={{ background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', border: '1px solid rgba(56, 189, 248, 0.3)' }}>
+                <Loader2 size={14} className="spin-icon" /> Engine Connecting...
+              </div>
+              <button 
+                className="btn-text" 
+                onClick={handleDisconnect}
+                title="Force Abort Connection"
+                style={{ 
+                  fontSize: '0.85rem', color: '#64748b', display: 'flex', alignItems: 'center', 
+                  gap: '0.35rem', padding: '0.4rem 0.75rem', background: 'transparent', 
+                  borderRadius: '20px', border: '1px solid rgba(100, 116, 139, 0.3)', cursor: 'pointer', 
+                  transition: 'all 0.2s', fontWeight: '500' 
+                }}
+                onMouseOver={(e) => e.currentTarget.style.background = 'rgba(100, 116, 139, 0.1)'}
+                onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+              >
+                <X size={14} /> Cancel
+              </button>
+            </>
           )}
         </div>
       </div>
