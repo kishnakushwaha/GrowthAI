@@ -93,6 +93,17 @@ export async function processSequences() {
         if (result.success) {
           console.log(`[WA-SEQ] ✅ Step ${enrollment.current_step} sent to ${enrollment.phone}`);
           
+          // Log to wa_logs for dashboard tracking
+          await supabase.from('wa_logs').insert({
+            lead_id: enrollment.lead_id,
+            phone: enrollment.phone,
+            biz_name: enrollment.biz_name,
+            message: renderedBody,
+            type: 'automation',
+            step: enrollment.current_step,
+            status: 'sent'
+          });
+
           // Calculate next step
           const nextStep = enrollment.current_step + 1;
           const nextStepConfig = SEQUENCE_STEPS.find(s => s.step === nextStep);

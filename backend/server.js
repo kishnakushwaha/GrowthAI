@@ -759,6 +759,41 @@ app.get('/api/wa/enrollments', requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/wa/stats — Aggregated Dashboard Numbers
+app.get('/api/wa/stats', requireAuth, async (req, res) => {
+  try {
+    const { data: logs } = await supabase.from('wa_logs').select('status');
+    const { data: enrolls } = await supabase.from('wa_enrollments').select('id').eq('status', 'active');
+    
+    const stats = {
+      sent: logs?.length || 0,
+      active: enrolls?.length || 0,
+      success: logs?.filter(l => l.status === 'sent').length || 0,
+      failed: logs?.filter(l => l.status === 'failed').length || 0
+    };
+    
+    res.json(stats);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch stats' });
+  }
+});
+
+// GET /api/wa/logs — History Log
+app.get('/api/wa/logs', requireAuth, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('wa_logs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(100);
+      
+    if (error) throw error;
+    res.json({ logs: data || [] });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch logs' });
+  }
+});
+
 // ===================== HEALTH / CRON ENDPOINT =====================
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });

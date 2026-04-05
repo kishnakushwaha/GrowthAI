@@ -32,6 +32,11 @@ const WhatsAppOutreach = () => {
   const [engineQr, setEngineQr] = useState(null);
   const [sending, setSending] = useState(false);
   const [sendResult, setSendResult] = useState(null);
+  
+  // Stats & Logs
+  const [waStats, setWaStats] = useState({ sent: 0, active: 0, success: 0, failed: 0 });
+  const [waLogs, setWaLogs] = useState([]);
+  const [logsLoading, setLogsLoading] = useState(false);
 
   // Poll Engine Status
   useEffect(() => {
@@ -47,10 +52,40 @@ const WhatsAppOutreach = () => {
       }
     };
     
+    const fetchStats = async () => {
+      try {
+        const res = await fetch(`${WA_API}/api/wa/stats`, { 
+          headers: { 'Authorization': `Bearer admin` } 
+        });
+        const data = await res.json();
+        setWaStats(data);
+      } catch (err) {}
+    };
+    
     fetchStatus();
-    interval = setInterval(fetchStatus, 5000);
+    fetchStats();
+    interval = setInterval(() => {
+      fetchStatus();
+      fetchStats();
+    }, 5000);
     return () => clearInterval(interval);
   }, []);
+
+  const fetchLogs = async () => {
+    setLogsLoading(true);
+    try {
+      const res = await fetch(`${WA_API}/api/wa/logs`, { 
+        headers: { 'Authorization': `Bearer admin` } 
+      });
+      const data = await res.json();
+      setWaLogs(data.logs || []);
+    } catch (err) {}
+    setLogsLoading(false);
+  };
+
+  useEffect(() => {
+    if (activeTab === 'activity') fetchLogs();
+  }, [activeTab]);
 
   // Compose form
   const [selectedTemplate, setSelectedTemplate] = useState(null);
@@ -316,6 +351,49 @@ const WhatsAppOutreach = () => {
 
   return (
     <div className="wa-outreach-container">
+      {/* 1. Statistics Cards Headroom */}
+      <div className="wa-stats-headroom">
+        <div className="wa-stat-card glass-panel">
+          <div className="wa-stat-icon" style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#6366f1' }}>
+            <Send size={20} />
+          </div>
+          <div className="wa-stat-info">
+            <span className="wa-stat-val">{waStats.sent}</span>
+            <span className="wa-stat-label">WhatsApp Sent</span>
+          </div>
+        </div>
+
+        <div className="wa-stat-card glass-panel">
+          <div className="wa-stat-icon" style={{ background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8' }}>
+            <Activity size={20} />
+          </div>
+          <div className="wa-stat-info">
+            <span className="wa-stat-val">{waStats.active}</span>
+            <span className="wa-stat-label">Sequences Active</span>
+          </div>
+        </div>
+
+        <div className="wa-stat-card glass-panel">
+          <div className="wa-stat-icon" style={{ background: 'rgba(34, 197, 94, 0.1)', color: '#22c55e' }}>
+            <Eye size={20} />
+          </div>
+          <div className="wa-stat-info">
+            <span className="wa-stat-val">{waStats.success}</span>
+            <span className="wa-stat-label">Delivered Successfully</span>
+          </div>
+        </div>
+
+        <div className="wa-stat-card glass-panel">
+          <div className="wa-stat-icon" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444' }}>
+            <AlertCircle size={20} />
+          </div>
+          <div className="wa-stat-info">
+            <span className="wa-stat-val">{waStats.failed}</span>
+            <span className="wa-stat-label">Failed Attempts</span>
+          </div>
+        </div>
+      </div>
+
       <div className="wa-header">
         <div>
           <h1>WhatsApp <span className="text-wa-gradient">Outreach</span></h1>
@@ -400,6 +478,12 @@ const WhatsAppOutreach = () => {
               onClick={() => setActiveTab('templates')}
             >
               <FileText size={18} /> Templates
+            </button>
+            <button 
+              className={`wa-tab ${activeTab === 'activity' ? 'active' : ''}`}
+              onClick={() => setActiveTab('activity')}
+            >
+              <Activity size={18} /> Activity Log
             </button>
           </div>
           
@@ -604,6 +688,65 @@ const WhatsAppOutreach = () => {
                     </div>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* ---- ACTIVITY LOG TAB ---- */}
+          {activeTab === 'activity' && (
+            <div className="wa-activity-panel glass-panel">
+              <div className="wa-panel-header">
+                <h2>Message History <span className="badge" style={{ verticalAlign: 'middle', fontSize: '0.7em', marginLeft: '8px' }}>Tracking Engine Active</span></h2>
+                <button className="wa-btn wa-btn-ghost" onClick={fetchLogs}>
+                  <Loader2 size={16} className={logsLoading ? 'spin-icon' : ''} /> Refresh Logs
+                </button>
+              </div>
+
+              <div className="wa-activity-table-container">
+                <table className="wa-activity-table">
+                  <thead>
+                    <tr>
+                      <th>BUSINESS / RECIPIENT</th>
+                      <th>TYPE</th>
+                      <th>MESSAGE PREVIEW</th>
+                      <th>STATUS</th>
+                      <th>SENT AT</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {waLogs.length === 0 && !logsLoading && (
+                      <tr><td colSpan="5" className="text-center text-muted py-5">No logs found yet. Start sending to track!</td></tr>
+                    )}
+                    {waLogs.map(log => (
+                      <tr key={log.id}>
+                        <td>
+                          <div style={{ fontWeight: '600', color: '#f8fafc' }}>{log.biz_name || 'Individual'}</div>
+                          <div style={{ fontSize: '11px', color: '#94a3b8' }}>{log.phone}</div>
+                        </td>
+                        <td>
+                          <span className={`badge ${log.type === 'automation' ? 'info' : 'primary'}`} style={{ fontSize: '10px' }}>
+                            {log.type === 'automation' ? `STEP ${log.step} FOLLOW-UP` : 'DIRECT MESSAGE'}
+                          </span>
+                        </td>
+                        <td title={log.message}>
+                          <div style={{ maxWidth: '280px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '12px', color: '#cbd5e1' }}>
+                            {log.message}
+                          </div>
+                        </td>
+                        <td>
+                          <span className={`badge ${log.status === 'sent' ? 'success' : 'danger'}`} style={{ fontSize: '11px' }}>
+                            {log.status === 'sent' ? 'Sent Automatically' : 'Failed'}
+                          </span>
+                        </td>
+                        <td style={{ fontSize: '12px', color: '#94a3b8' }}>
+                          {new Date(log.created_at).toLocaleString('en-IN', {
+                            day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: true
+                          })}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
