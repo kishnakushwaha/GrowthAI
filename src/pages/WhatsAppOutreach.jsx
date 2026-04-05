@@ -13,12 +13,12 @@ const DEFAULT_TEMPLATES = [
   {
     id: 'tpl_wa_1',
     name: 'Agency Introduction',
-    body: 'Hi {{contact_name}},\n\nI noticed {{business_name}} while looking at businesses in {{city}}. We specialize in helping local businesses like yours get more customers through targeted Meta & Google Ads.\n\nWould you be open to a quick 5-min chat this week to see if we can help you grow?'
+    body: 'Hi *[[contact_name]]*,\n\nI noticed *[[business_name]]* while looking at businesses in [[city]]. We specialize in helping local businesses like yours get more customers through targeted Meta & Google Ads.\n\nWould you be open to a quick 5-min chat this week to see if we can help you grow?'
   },
   {
     id: 'tpl_wa_2',
     name: 'Missing Website Pitch',
-    body: 'Hello!\n\nI was looking for {{business_name}} in {{city}} but couldn\'t find a website. In today\'s digital world, having a professional website is crucial for getting new customers.\n\nWe build highly converting websites starting at affordable rates. Let me know if you\'d like to see some of our recent work!'
+    body: 'Hello!\n\nI was looking for *[[business_name]]* in [[city]] but couldn\'t find a website. In today\'s digital world, having a professional website is crucial for getting new customers.\n\nWe build highly converting websites starting at affordable rates. Let me know if you\'d like to see some of our recent work!'
   }
 ];
 
@@ -69,7 +69,28 @@ const WhatsAppOutreach = () => {
     const stored = localStorage.getItem(TEMPLATES_STORAGE_KEY);
     if (stored) {
       try {
-        setTemplates(JSON.parse(stored));
+        let parsed = JSON.parse(stored);
+        // Migration: Conver to [[ ]] syntax
+        let migrated = false;
+        parsed = parsed.map(t => {
+          if (t.body && (t.body.includes('{{') || t.body.includes('Delhi'))) {
+            migrated = true;
+            return { 
+              ...t, 
+              body: t.body
+                .replace(/{{contact_name}}/g, '[[contact_name]]')
+                .replace(/{{business_name}}/g, '[[business_name]]')
+                .replace(/{{city}}/g, '[[city]]')
+                .replace('businesses in Delhi', 'businesses in [[city]]')
+            };
+          }
+          return t;
+        });
+        
+        setTemplates(parsed);
+        if (migrated) {
+          localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(parsed));
+        }
       } catch (e) {
         setTemplates(DEFAULT_TEMPLATES);
       }
@@ -116,12 +137,16 @@ const WhatsAppOutreach = () => {
            city: city || 'your city'
         };
         
-        if (rawTemplate.body) {
-           let bdy = rawTemplate.body;
+        // Find the first template body to initialize correctly
+        const initialTpl = templates.length > 0 ? templates[0] : DEFAULT_TEMPLATES[0];
+        if (initialTpl && initialTpl.body) {
+           let bdy = initialTpl.body;
            for (const [k, v] of Object.entries(initialVars)) {
-              bdy = bdy.replace(new RegExp(`{{${k}}}`, 'g'), v);
+              bdy = bdy.replace(new RegExp(`\\[\\[${k}\\]\\]`, 'gi'), v);
            }
            setComposeBody(bdy);
+           setRawTemplate(initialTpl);
+           setSelectedTemplate(initialTpl.id);
         }
         
         window.history.replaceState(null, '', window.location.pathname + '#whatsapp');
@@ -140,21 +165,8 @@ const WhatsAppOutreach = () => {
 
   const extractFormalName = (bizName) => {
     if (!bizName) return '';
-    // 1. Cut off at special characters (brackets, dash, pipe, etc.)
-    let name = bizName.split(/[\(\-\|]/)[0].trim();
-    
-    // 2. Remove titles/prefixes
-    const prefixes = ['mr.', 'dr.', 'ms.', 'mrs.', 'shree', 'sri', 'jai', 'the', 'best'];
-    let words = name.split(/\s+/);
-    
-    // Remove if first word is a prefix
-    if (words.length > 0 && prefixes.includes(words[0].toLowerCase())) {
-      words.shift();
-    }
-    
-    // 3. Take first 3 words max
-    const result = words.slice(0, 3).join(' ');
-    return result || 'Team';
+    // Reverted to full name as requested, just cleaning whitespace
+    return bizName.trim();
   };
 
   const getAutoVars = (name, business, city) => ({
@@ -166,10 +178,14 @@ const WhatsAppOutreach = () => {
   const rerenderFromTemplate = (newVars) => {
     if (rawTemplate.body) {
       let bdy = rawTemplate.body;
-      for (const [k, v] of Object.entries(newVars)) {
-        if (v) {
-          bdy = bdy.replace(new RegExp(`{{${k}}}`, 'g'), v);
-        }
+      const vars = {
+        contact_name: newVars.contact_name || composeToName,
+        business_name: newVars.business_name || composeBusiness,
+        city: newVars.city || composeVars.city
+      };
+      
+      for (const [k, v] of Object.entries(vars)) {
+        bdy = bdy.replace(new RegExp(`\\[\\[${k}\\]\\]`, 'gi'), v);
       }
       setComposeBody(bdy);
     }

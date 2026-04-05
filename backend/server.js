@@ -9,6 +9,7 @@ import { runAudit } from './auditEngine.js';
 import supabase from './supabaseClient.js';
 import { configureSmtp, getTransporter, getSmtpEmail, sendEmail, renderTemplate, trackOpen, trackClick, loadSmtpConfig } from './emailEngine.js';
 import { STAGES, getLeads, createLead, updateLead, deleteLead, getActivities, addActivity, importFromScraper, getAnalytics } from './crmEngine.js';
+import { processSequences } from './waSequenceEngine.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -691,6 +692,73 @@ app.get('/api/track/click/:trackingId', async (req, res) => {
   res.redirect(redirect);
 });
 
+// ===================== WHATSAPP AUTOMATION API =====================
+
+// POST /api/wa/enroll — Start a sequence for a lead
+app.post('/api/wa/enroll', requireAuth, async (req, res) => {
+  const { leadId, phone, bizName, city } = req.body;
+  
+  if (!leadId || !phone) {
+    return res.status(400).json({ error: 'Lead ID and Phone are required' });
+  }
+
+  try {
+    // 1. Initial Enrollment
+    const { data, error } = await supabase
+      .from('wa_enrollments')
+      .upsert({
+        lead_id: leadId,
+        phone,
+        biz_name: bizName,
+        city: city || 'your city',
+        status: 'active',
+        current_step: 1,
+        next_run_at: new Date().toISOString() // Run immediately
+      })
+      .select('id').single();
+
+    if (error) throw error;
+    
+    // 2. Trigger the processor immediately to send Day 1
+    processSequences();
+    
+    res.json({ success: true, enrollmentId: data.id });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to enroll in sequence: ' + err.message });
+  }
+});
+
+// POST /api/wa/stop — Stop a sequence
+app.post('/api/wa/stop', requireAuth, async (req, res) => {
+  const { leadId } = req.body;
+  
+  try {
+    const { error } = await supabase
+      .from('wa_enrollments')
+      .update({ status: 'paused', next_run_at: null })
+      .eq('lead_id', leadId);
+
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to stop sequence: ' + err.message });
+  }
+});
+
+// GET /api/wa/enrollments — List all active enrollments
+app.get('/api/wa/enrollments', requireAuth, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('wa_enrollments')
+      .select('lead_id, status, current_step, next_run_at');
+    
+    if (error) throw error;
+    res.json({ enrollments: data || [] });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch enrollments' });
+  }
+});
+
 // ===================== HEALTH / CRON ENDPOINT =====================
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -703,7 +771,16 @@ app.listen(PORT, async () => {
   // Auto-load SMTP config from database on startup
   try {
     await loadSmtpConfig();
+    
+    // Start the WhatsApp Sequence Engine Check (Runs every 1 hour)
+    setInterval(() => {
+      processSequences();
+    }, 1000 * 60 * 60);
+
+    // Initial check on boot
+    processSequences();
+    
   } catch (err) {
-    console.warn('⚠️ SMTP auto-load skipped:', err.message);
+    console.warn('⚠️ Initialization skipped:', err.message);
   }
 });

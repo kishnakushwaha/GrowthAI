@@ -2,7 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Search, Download, Filter, Flame, Globe, Phone, MapPin, Star, 
   ExternalLink, Loader2, PlayCircle, X, ChevronLeft, ChevronRight,
-  BarChart3, Users, AlertTriangle, TrendingUp, Mail, FileSpreadsheet, MessageCircle
+  BarChart3, Users, AlertTriangle, TrendingUp, Mail, FileSpreadsheet, MessageCircle,
+  Play, Square, CheckCircle2, AlertCircle
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import './Leads.css';
@@ -12,10 +13,12 @@ import API from '../config';
 const Leads = () => {
   const [token] = useState(() => sessionStorage.getItem('adminToken') || '');
   const [leads, setLeads] = useState([]);
+  const [enrollments, setEnrollments] = useState({});
   const [total, setTotal] = useState(0);
   const [stats, setStats] = useState({});
   const [industries, setIndustries] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState(null);
 
   // Filters
   const [search, setSearch] = useState('');
@@ -63,7 +66,35 @@ const Leads = () => {
     setLoading(false);
   }, [page, sortBy, sortDir, search, industry, minRating, hotOnly, noWebsite, lowReviews, token]);
 
-  useEffect(() => { fetchLeads(); }, [fetchLeads]);
+  const fetchEnrollments = async () => {
+    try {
+      const res = await fetch(`${API}/api/wa/enrollments`, { headers });
+      const data = await res.json();
+      const map = {};
+      (data.enrollments || []).forEach(e => { map[e.lead_id] = e; });
+      setEnrollments(map);
+    } catch (err) { console.error('Failed to fetch enrollments'); }
+  };
+
+  useEffect(() => { 
+    fetchLeads(); 
+    fetchEnrollments();
+  }, [fetchLeads]);
+
+  const toggleSequence = async (lead) => {
+    setActionLoading(lead.id);
+    try {
+      const isEnrolled = !!enrollments[lead.id];
+      const endpoint = isEnrolled ? `${API}/api/wa/stop` : `${API}/api/wa/enroll`;
+      await fetch(endpoint, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ lead_id: lead.id })
+      });
+      await fetchEnrollments();
+    } catch (err) { console.error(err); }
+    setActionLoading(null);
+  };
 
   // Poll active scrape job
   useEffect(() => {
@@ -475,6 +506,35 @@ const Leads = () => {
                       >
                         <MessageCircle size={16} />
                       </button>
+
+                      {/* START/STOP AUTOMATION BUTTONS */}
+                      <div className="automation-controls" style={{ display: 'flex', gap: '4px', marginLeft: '8px', borderLeft: '1px solid #eee', paddingLeft: '8px' }}>
+                        {enrollments[lead.id]?.status === 'active' ? (
+                          <button 
+                            onClick={() => stopWASequence(lead.id)}
+                            disabled={actionLoading === lead.id}
+                            title="Stop Automated Sequence"
+                            style={{ background: '#fee2e2', border: 'none', padding: '4px', borderRadius: '4px', color: '#dc2626', cursor: 'pointer' }}
+                          >
+                            <Square size={14} fill="#dc2626" />
+                          </button>
+                        ) : (
+                          <button 
+                            onClick={() => startWASequence(lead)}
+                            disabled={actionLoading === lead.id || lead.phone === 'N/A' || !lead.phone}
+                            title="Start 3-Step WhatsApp Sequence"
+                            style={{ background: '#ecfdf5', border: 'none', padding: '4px', borderRadius: '4px', color: '#059669', cursor: 'pointer', opacity: (lead.phone === 'N/A' || !lead.phone) ? 0.5 : 1 }}
+                          >
+                            {actionLoading === lead.id ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} fill="#059669" />}
+                          </button>
+                        )}
+                        
+                        {enrollments[lead.id] && (
+                          <div style={{ fontSize: '10px', color: enrollments[lead.id].status === 'active' ? '#059669' : '#6b7280', display: 'flex', alignItems: 'center', fontWeight: 'bold' }}>
+                            {enrollments[lead.id].status === 'active' ? `STEP ${enrollments[lead.id].current_step}` : 'PAUSED'}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </td>
                 </tr>
