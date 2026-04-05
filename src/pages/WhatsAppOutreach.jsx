@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   MessageCircle, Send, Settings, FileText, Users, Eye, MousePointer, AlertCircle,
-  Loader2, ChevronDown, ChevronUp, Edit3, Plus, X, Check, Smartphone, Activity, WifiOff
+  Loader2, ChevronDown, ChevronUp, Edit3, Plus, X, Check, Smartphone, Activity, WifiOff, CheckCircle2
 } from 'lucide-react';
 import { WA_API } from '../config';
 import './WhatsAppOutreach.css';
