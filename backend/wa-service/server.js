@@ -97,18 +97,27 @@ app.post('/api/wa/send', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Phone and message required.' });
     }
 
-    // WhatsApp identifiers require country code suffix @c.us
-    // Format input securely, auto-prepending 91 for standard 10-digit Indian numbers
+    // Clean the phone number to digits only
     let cleanedPhone = phone.replace(/[^0-9]/g, '');
-    if (cleanedPhone.length === 10) {
-      cleanedPhone = `91${cleanedPhone}`;
-    }
-    const chatId = `${cleanedPhone}@c.us`;
-
-    await waClient.sendMessage(chatId, message);
-    console.log(`[WA] Sent message to ${cleanedPhone}`);
     
-    res.json({ success: true, message: 'Message queued to WhatsApp' });
+    // Add India country code if it's a 10-digit number
+    if (cleanedPhone.length === 10) {
+      cleanedPhone = '91' + cleanedPhone;
+    }
+
+    // Use getNumberId() to resolve the correct WhatsApp LID
+    // (WhatsApp migrated from @c.us to LID-based identities)
+    const numberId = await waClient.getNumberId(cleanedPhone);
+    
+    if (!numberId) {
+      console.log(`[WA] Number ${cleanedPhone} is not registered on WhatsApp`);
+      return res.status(400).json({ success: false, error: 'This number is not registered on WhatsApp.' });
+    }
+
+    await waClient.sendMessage(numberId._serialized, message);
+    console.log(`[WA] ✅ Sent message to ${cleanedPhone} (${numberId._serialized})`);
+    
+    res.json({ success: true, message: 'Message sent successfully!' });
   } catch (error) {
     console.error('[WA] Send error:', error);
     res.status(500).json({ success: false, error: error.message });
