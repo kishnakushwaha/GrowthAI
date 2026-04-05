@@ -55,7 +55,7 @@ const WhatsAppOutreach = () => {
     const fetchStats = async () => {
       try {
         const res = await fetch(`${WA_API}/api/wa/stats`, { 
-          headers: { 'Authorization': `Bearer admin` } 
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('admin_token')}` } 
         });
         const data = await res.json();
         setWaStats(data);
@@ -295,15 +295,25 @@ const WhatsAppOutreach = () => {
       setSending(true);
       setSendResult(null);
       try {
+        const token = localStorage.getItem('admin_token');
         const res = await fetch(`${WA_API}/api/wa/send`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phone: composePhone, message: composeBody })
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ 
+            phone: composePhone, 
+            message: composeBody,
+            bizName: composeBusiness,
+            leadId: new URLSearchParams(window.location.search).get('leadId')
+          })
         });
         const data = await res.json();
         
         if (data.success) {
           setSendResult({ type: 'success', text: 'Sent natively via API!' });
+          fetchLogs(); // Refresh instantly
           // Clear after a second
           setTimeout(() => setSendResult(null), 3000);
         } else {
@@ -329,9 +339,13 @@ const WhatsAppOutreach = () => {
     setEngineConnected(false);
     
     try {
+      const token = localStorage.getItem('admin_token');
       await fetch(`${WA_API}/api/wa/disconnect`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
       });
     } catch (e) {
       console.error("Disconnect API failed:", e);

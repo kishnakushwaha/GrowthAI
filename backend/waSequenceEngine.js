@@ -47,6 +47,9 @@ Let me know if you'd like me to share it.`
 export async function processSequences() {
   console.log('[WA-SEQ] Running automation check...');
   
+  // Calculate Base URL for tracking
+  const trackingBaseUrl = process.env.RENDER_EXTERNAL_URL || 'http://localhost:3001';
+  
   try {
     // 1. Get all active enrollments that are due for next step
     const { data: enrollments, error } = await supabase
@@ -71,11 +74,16 @@ export async function processSequences() {
         continue;
       }
 
+      const trackingId = uuidv4();
+
       // Render placeholders [[ ]]
       let renderedBody = stepConfig.body
         .replace(/\[\[contact_name\]\]/g, enrollment.biz_name?.split(' ')[0] || 'Team')
         .replace(/\[\[business_name\]\]/g, enrollment.biz_name || 'your business')
         .replace(/\[\[city\]\]/g, enrollment.city || 'your city');
+
+      // Wrap all links for tracking engagement!
+      const trackedBody = wrapUrls(renderedBody, trackingId, trackingBaseUrl);
 
       // Send via WhatsApp Service
       try {
@@ -84,25 +92,35 @@ export async function processSequences() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             phone: enrollment.phone,
-            message: renderedBody
+            message: trackedBody
           })
         });
 
         const result = await response.json();
         
         if (result.success) {
-          console.log(`[WA-SEQ] ✅ Step ${enrollment.current_step} sent to ${enrollment.phone}`);
+          console.log(`[WA-SEQ] ✅ Step ${enrollment.current_step} tracked sent to ${enrollment.phone}`);
           
           // Log to wa_logs for dashboard tracking
-          await supabase.from('wa_logs').insert({
+          const logData = {
             lead_id: enrollment.lead_id,
+            tracking_id: trackingId, 
             phone: enrollment.phone,
             biz_name: enrollment.biz_name,
-            message: renderedBody,
+            message: trackedBody,
             type: 'automation',
             step: enrollment.current_step,
             status: 'sent'
-          });
+          };
+
+          const { error: insertErr } = await supabase.from('wa_logs').insert(logData);
+          
+          if (insertErr) {
+             console.error('[WA-SEQ] Tracking Log Insert Failed, attempting fallback...', insertErr.message);
+             // FALLBACK: Try without tracking_id in case the column is missing
+             delete logData.tracking_id;
+             await supabase.from('wa_logs').insert(logData);
+          }
 
           // Calculate next step
           const nextStep = enrollment.current_step + 1;

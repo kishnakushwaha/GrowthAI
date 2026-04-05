@@ -131,6 +131,23 @@ export function getSmtpEmail() {
   return smtpEmail;
 }
 
+// ==================== TRACKING UTILITIES ====================
+
+function wrapUrls(text, trackingId, trackingBaseUrl) {
+  if (!trackingBaseUrl || !trackingId) return text;
+  
+  // Regex to find URLs not already inside an href or src attribute
+  const urlRegex = /(https?:\/\/[^\s<]+)/g;
+  
+  return text.replace(urlRegex, (url) => {
+    // Avoid double-wrapping
+    if (url.includes('/api/track/click/')) return url;
+    
+    const encodedUrl = encodeURIComponent(url);
+    return `${trackingBaseUrl}/api/track/click/${trackingId}?url=${encodedUrl}`;
+  });
+}
+
 // ==================== SEND SINGLE EMAIL ====================
 
 export async function sendEmail({ to, toName, businessName, subject, body, campaignId, trackingBaseUrl }) {
@@ -139,21 +156,24 @@ export async function sendEmail({ to, toName, businessName, subject, body, campa
   }
 
   const trackingId = uuidv4();
+  const baseUrl = trackingBaseUrl || process.env.RENDER_EXTERNAL_URL || 'http://localhost:3001';
 
-  // Add tracking pixel to email body
-  const trackingPixel = trackingBaseUrl 
-    ? `\n\n<img src="${trackingBaseUrl}/api/track/open/${trackingId}" width="1" height="1" style="display:none" />`
-    : '';
+  // 1. Wrap all links in the main body text BEFORE HTML processing
+  const trackedBody = wrapUrls(body, trackingId, baseUrl);
 
-  // Build professional HTML email
-  const processedBody = body
+  // 2. Add tracking pixel for OPEN tracking
+  const trackingPixel = `\n\n<img src="${baseUrl}/api/track/open/${trackingId}" width="1" height="1" style="display:none" />`;
+
+  // 3. Build professional HTML email using the tracked body
+  const processedBody = trackedBody
     .replace(/\n/g, '<br>')
     .replace(/•/g, '&bull;')
     .replace(/→/g, '&rarr;')
     .replace(/✅/g, '&#9989;')
     .replace(/(\d+\/100)/g, '<span style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;padding:2px 8px;border-radius:4px;font-weight:700;font-size:15px;">$1</span>')
     .replace(/(\d+)\s+(critical issues)/gi, '<span style="background:#fef2f2;color:#dc2626;padding:2px 8px;border-radius:4px;font-weight:700;">$1 $2</span>')
-    .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color:#6366f1;font-weight:600;text-decoration:none;border-bottom:2px solid #6366f1;">$1</a>')
+    // We already wrapped links in `trackedBody`, so let's just make sure they look good as <a> tags!
+    .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" style="color:#6366f1;font-weight:600;text-decoration:none;border-bottom:2px solid #6366f1;">Link</a>')
     .replace(/(20-50 new leads)/gi, '<span style="color:#059669;font-weight:700;">$1</span>')
     .replace(/(page 1)/gi, '<span style="background:#ecfdf5;color:#059669;padding:2px 6px;border-radius:4px;font-weight:600;">$1</span>')
     .replace(/(30\+ leads)/gi, '<span style="color:#059669;font-weight:700;">$1</span>')
@@ -199,10 +219,10 @@ export async function sendEmail({ to, toName, businessName, subject, body, campa
           </td>
         </tr>
         
-        <!-- CTA Button -->
+        <!-- CTA Button (Wrap this too!) -->
         <tr>
           <td align="center" style="padding:0 40px 32px;">
-            <a href="https://wa.me/918743933258?text=Hi%2C%20I%27m%20interested%20in%20improving%20my%20online%20presence" 
+            <a href="${baseUrl}/api/track/click/${trackingId}?url=${encodeURIComponent('https://wa.me/918743933258?text=Hi%2C%20I%27m%20interested%20in%20improving%20my%20online%20presence')}" 
                style="display:inline-block;background:linear-gradient(135deg,#4f46e5,#7c3aed);color:#ffffff;padding:14px 36px;border-radius:10px;font-size:15px;font-weight:700;text-decoration:none;letter-spacing:0.3px;box-shadow:0 4px 14px rgba(99,102,241,0.4);">
               📞 Book Free Strategy Call →
             </a>
@@ -262,7 +282,7 @@ export async function sendEmail({ to, toName, businessName, subject, body, campa
       from: transporter.options.auth?.user,
       to,
       subject,
-      text: body,
+      text: trackedBody,
       html: htmlBody
     });
 
@@ -319,24 +339,31 @@ export async function trackOpen(trackingId) {
 
 export async function trackClick(trackingId) {
   try {
-    await supabase.from('email_logs')
+    // 1. Try updating email_logs
+    const { data: emailLog, error: emailError } = await supabase.from('email_logs')
       .update({ clicked_at: new Date().toISOString() })
       .eq('tracking_id', trackingId)
-      .is('clicked_at', null);
+      .is('clicked_at', null)
+      .select('campaign_id').single();
 
-    const { data: log } = await supabase.from('email_logs')
-      .select('campaign_id').eq('tracking_id', trackingId).single();
-
-    if (log?.campaign_id) {
+    if (!emailError && emailLog?.campaign_id) {
       const { data: clickedLogs } = await supabase.from('email_logs')
         .select('id')
-        .eq('campaign_id', log.campaign_id)
+        .eq('campaign_id', emailLog.campaign_id)
         .not('clicked_at', 'is', null);
       
       await supabase.from('campaigns')
         .update({ clicked_count: clickedLogs?.length || 0 })
-        .eq('id', log.campaign_id);
+        .eq('id', emailLog.campaign_id);
+      return;
     }
+
+    // 2. If not found in email_logs, try updating wa_logs
+    await supabase.from('wa_logs')
+      .update({ clicked_at: new Date().toISOString() }) // Assuming we added this column
+      .eq('tracking_id', trackingId)
+      .is('clicked_at', null);
+
   } catch (err) {
     console.error('Track click error:', err);
   }

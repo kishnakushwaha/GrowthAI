@@ -394,6 +394,63 @@ app.put('/api/email/templates/:id', requireAuth, async (req, res) => {
   }
 });
 
+// POST /api/wa/send — Manual WhatsApp from Dashboard
+app.post('/api/wa/send', requireAuth, async (req, res) => {
+  const { phone, message, leadId, bizName } = req.body;
+  if (!phone || !message) return res.status(400).json({ error: 'Phone and message required' });
+
+  try {
+    const trackingId = uuidv4();
+    const trackingBaseUrl = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+
+    // Helper to wrap manual links
+    const wrapUrls = (text, tId, base) => {
+      const urlRegex = /(https?:\/\/[^\s<]+)/g;
+      return text.replace(urlRegex, (url) => {
+        if (url.includes('/api/track/click/')) return url;
+        return `${base}/api/track/click/${tId}?url=${encodeURIComponent(url)}`;
+      });
+    };
+
+    const trackedMessage = wrapUrls(message, trackingId, trackingBaseUrl);
+
+    const response = await fetch('http://localhost:4000/api/wa/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, message: trackedMessage })
+    });
+
+    const data = await response.json();
+    
+    if (data.success) {
+      // Log manual send log with engagement tracking — FAIL-SAFE VERSION
+      const logData = {
+        lead_id: leadId || null,
+        tracking_id: trackingId,
+        phone,
+        biz_name: bizName || 'Manual',
+        message: trackedMessage,
+        type: 'manual',
+        status: 'sent'
+      };
+
+      const { error: insertErr } = await supabase.from('wa_logs').insert(logData);
+      
+      if (insertErr) {
+        console.error('[WA-API] Tracking Log Insert Failed, attempting fallback...', insertErr.message);
+        delete logData.tracking_id;
+        await supabase.from('wa_logs').insert(logData);
+      }
+      
+      res.json({ success: true, trackingId });
+    } else {
+      res.status(500).json({ error: data.error || 'Automation Engine (Port 4000) Failed' });
+    }
+  } catch (err) {
+    res.status(500).json({ error: 'Manual send failed: ' + err.message });
+  }
+});
+
 // POST /api/email/send — Send a single email
 app.post('/api/email/send', requireAuth, async (req, res) => {
   const { to, toName, businessName, templateId, variables } = req.body;
