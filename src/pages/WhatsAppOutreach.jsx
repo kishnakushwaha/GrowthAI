@@ -351,45 +351,37 @@ const WhatsAppOutreach = () => {
 
   return (
     <div className="wa-outreach-container">
-      {/* 1. Statistics Cards Headroom */}
-      <div className="wa-stats-headroom">
-        <div className="wa-stat-card glass-panel">
-          <div className="wa-stat-icon" style={{ background: 'rgba(99, 102, 241, 0.1)', color: '#6366f1' }}>
-            <Send size={20} />
-          </div>
-          <div className="wa-stat-info">
-            <span className="wa-stat-val">{waStats.sent}</span>
-            <span className="wa-stat-label">WhatsApp Sent</span>
+      {/* Dashboard Stats — Matching Main Outreach (Email) */}
+      <div className="stats-grid">
+        <div className="stat-card glass-panel">
+          <Send size={24} color="var(--primary)" />
+          <div>
+            <span className="stat-number">{waStats.sent}</span>
+            <span className="stat-label text-muted">WhatsApp Sent</span>
           </div>
         </div>
 
-        <div className="wa-stat-card glass-panel">
-          <div className="wa-stat-icon" style={{ background: 'rgba(56, 189, 248, 0.1)', color: '#38bdf8' }}>
-            <Activity size={20} />
-          </div>
-          <div className="wa-stat-info">
-            <span className="wa-stat-val">{waStats.active}</span>
-            <span className="wa-stat-label">Sequences Active</span>
+        <div className="stat-card glass-panel">
+          <Activity size={24} color="var(--accent)" />
+          <div>
+            <span className="stat-number">{waStats.active}</span>
+            <span className="stat-label text-muted">Sequences Active</span>
           </div>
         </div>
 
-        <div className="wa-stat-card glass-panel">
-          <div className="wa-stat-icon" style={{ background: 'rgba(34, 197, 94, 0.1)', color: '#22c55e' }}>
-            <Eye size={20} />
-          </div>
-          <div className="wa-stat-info">
-            <span className="wa-stat-val">{waStats.success}</span>
-            <span className="wa-stat-label">Delivered Successfully</span>
+        <div className="stat-card glass-panel">
+          <CheckCircle2 size={24} color="#22c55e" />
+          <div>
+            <span className="stat-number">{waStats.success}</span>
+            <span className="stat-label text-muted">Delivered</span>
           </div>
         </div>
 
-        <div className="wa-stat-card glass-panel">
-          <div className="wa-stat-icon" style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#ef4444' }}>
-            <AlertCircle size={20} />
-          </div>
-          <div className="wa-stat-info">
-            <span className="wa-stat-val">{waStats.failed}</span>
-            <span className="wa-stat-label">Failed Attempts</span>
+        <div className="stat-card glass-panel">
+          <AlertCircle size={24} color="#ef4444" />
+          <div>
+            <span className="stat-number">{waStats.failed}</span>
+            <span className="stat-label text-muted">Failed</span>
           </div>
         </div>
       </div>
