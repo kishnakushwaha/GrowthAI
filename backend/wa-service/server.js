@@ -98,8 +98,11 @@ app.post('/api/wa/send', async (req, res) => {
     }
 
     // WhatsApp identifiers require country code suffix @c.us
-    // Format input (e.g. "919876543210" -> "919876543210@c.us")
+    // Format input securely, auto-prepending 91 for standard 10-digit Indian numbers
     let cleanedPhone = phone.replace(/[^0-9]/g, '');
+    if (cleanedPhone.length === 10) {
+      cleanedPhone = `91${cleanedPhone}`;
+    }
     const chatId = `${cleanedPhone}@c.us`;
 
     await waClient.sendMessage(chatId, message);
