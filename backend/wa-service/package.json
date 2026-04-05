@@ -7,7 +7,7 @@
     "start": "PUPPETEER_CACHE_DIR=./.cache node server.js"
   },
   "dependencies": {
-    "whatsapp-web.js": "^1.26.0",
+    "whatsapp-web.js": "github:pedroslopez/whatsapp-web.js#main",
     "express": "^4.19.2",
     "cors": "^2.8.5",
     "qrcode-terminal": "^0.12.0",
