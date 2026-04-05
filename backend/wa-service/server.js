@@ -145,8 +145,8 @@ app.post('/api/wa/disconnect', async (req, res) => {
   }
 });
 
-// Boot the API
-const PORT = process.env.PORT || 4000;
+// Boot the API — HARDCODED to 4000 because Caddy occupies 80/443 for SSL
+const PORT = 4000;
 app.listen(PORT, () => {
   console.log(`🚀 WhatsApp Service listening on port ${PORT}`);
   startWhatsApp();
