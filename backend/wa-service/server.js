@@ -13,6 +13,10 @@ let waClient;
 let isReady = false;
 let currentQr = null;
 
+// Temporary in-memory cache for WhatsApp LIDs (resolved from phone numbers)
+// This makes subsequent sends to the same number near-instant.
+const idCache = new Map();
+
 async function startWhatsApp() {
   // Sync the previous session from Supabase (if any) before booting!
   await pullLocalAuth();
@@ -65,6 +69,7 @@ async function startWhatsApp() {
   waClient.on('disconnected', (reason) => {
     console.log('[WA] Client was logged out or disconnected:', reason);
     isReady = false;
+    idCache.clear(); // Clear cache on logout to be safe
   });
 
   waClient.initialize();
@@ -105,19 +110,33 @@ app.post('/api/wa/send', async (req, res) => {
       cleanedPhone = '91' + cleanedPhone;
     }
 
-    // Use getNumberId() to resolve the correct WhatsApp LID
-    // (WhatsApp migrated from @c.us to LID-based identities)
-    const numberId = await waClient.getNumberId(cleanedPhone);
-    
-    if (!numberId) {
-      console.log(`[WA] Number ${cleanedPhone} is not registered on WhatsApp`);
-      return res.status(400).json({ success: false, error: 'This number is not registered on WhatsApp.' });
+    let serializedId = idCache.get(cleanedPhone);
+
+    if (!serializedId) {
+      console.log(`[WA] Cache miss for ${cleanedPhone}, looking up ID...`);
+      const startTime = Date.now();
+      const numberId = await waClient.getNumberId(cleanedPhone);
+      const lookupTime = Date.now() - startTime;
+      
+      if (!numberId) {
+        console.log(`[WA] Number ${cleanedPhone} is not registered on WhatsApp`);
+        return res.status(400).json({ success: false, error: 'This number is not registered on WhatsApp.' });
+      }
+      
+      serializedId = numberId._serialized;
+      idCache.set(cleanedPhone, serializedId);
+      console.log(`[WA] Resolved ID for ${cleanedPhone} in ${lookupTime}ms`);
+    } else {
+      console.log(`[WA] Cache hit for ${cleanedPhone}!`);
     }
 
-    await waClient.sendMessage(numberId._serialized, message);
-    console.log(`[WA] ✅ Sent message to ${cleanedPhone} (${numberId._serialized})`);
+    const sendStartTime = Date.now();
+    await waClient.sendMessage(serializedId, message);
+    const sendTime = Date.now() - sendStartTime;
     
-    res.json({ success: true, message: 'Message sent successfully!' });
+    console.log(`[WA] ✅ Sent message to ${cleanedPhone} in ${sendTime}ms`);
+    
+    res.json({ success: true, message: 'Message sent successfully!', total_ms: Date.now() });
   } catch (error) {
     console.error('[WA] Send error:', error);
     res.status(500).json({ success: false, error: error.message });

@@ -437,7 +437,27 @@ const Leads = () => {
                         onClick={() => {
                           const targetPhone = lead.phone && lead.phone !== 'N/A' ? lead.phone : '';
                           const businessName = lead.place_name || '';
-                          window.location.hash = `#whatsapp?phone=${encodeURIComponent(targetPhone)}&business=${encodeURIComponent(businessName)}`;
+                          
+                          // Smart City Extraction
+                          const findCity = (addr, ind) => {
+                            if (!addr || addr === 'N/A') return '';
+                            // Priority 1: Check if city is in industry (e.g. "Dentists in Delhi")
+                            const commonCities = ['Delhi', 'Noida', 'Gurgaon', 'Mumbai', 'Bangalore', 'Pune', 'Hyderabad', 'Chennai', 'Kolkata', 'Jaipur', 'Lucknow', 'Ahmedabad', 'Chandigarh'];
+                            for (const c of commonCities) {
+                              if (ind?.toLowerCase().includes(c.toLowerCase())) return c;
+                            }
+                            // Priority 2: Extract from Address (usually before state/zip or at the end)
+                            const parts = addr.split(',').map(s => s.trim());
+                            if (parts.length >= 2) {
+                              // Often city is the 2nd to last or 3rd to last part
+                              const possible = parts[parts.length - 2]; 
+                              if (possible && !/^\d+$/.test(possible)) return possible;
+                            }
+                            return parts[0]; // Fallback to first part
+                          };
+
+                          const cityName = findCity(lead.address, lead.industry);
+                          window.location.hash = `#whatsapp?phone=${encodeURIComponent(targetPhone)}&business=${encodeURIComponent(businessName)}&city=${encodeURIComponent(cityName)}`;
                         }}
                         style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#25D366', padding: '4px', borderRadius: '4px' }}
                       >

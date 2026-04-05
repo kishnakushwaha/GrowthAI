@@ -13,12 +13,12 @@ const DEFAULT_TEMPLATES = [
   {
     id: 'tpl_wa_1',
     name: 'Agency Introduction',
-    body: 'Hi {{contact_name}},\n\nI noticed {{business_name}} while looking at businesses in Delhi. We specialize in helping local businesses like yours get more customers through targeted Meta & Google Ads.\n\nWould you be open to a quick 5-min chat this week to see if we can help you grow?'
+    body: 'Hi {{contact_name}},\n\nI noticed {{business_name}} while looking at businesses in {{city}}. We specialize in helping local businesses like yours get more customers through targeted Meta & Google Ads.\n\nWould you be open to a quick 5-min chat this week to see if we can help you grow?'
   },
   {
     id: 'tpl_wa_2',
     name: 'Missing Website Pitch',
-    body: 'Hello!\n\nI was looking for {{business_name}} online but couldn\'t find a website. In today\'s digital world, having a professional website is crucial for getting new customers.\n\nWe build highly converting websites starting at affordable rates. Let me know if you\'d like to see some of our recent work!'
+    body: 'Hello!\n\nI was looking for {{business_name}} in {{city}} but couldn\'t find a website. In today\'s digital world, having a professional website is crucial for getting new customers.\n\nWe build highly converting websites starting at affordable rates. Let me know if you\'d like to see some of our recent work!'
   }
 ];
 
@@ -102,9 +102,26 @@ const WhatsAppOutreach = () => {
         if (business) {
           setComposeBusiness(business);
           setComposeVars(prev => ({ ...prev, business_name: business }));
-          if (rawTemplate.body) {
-            setComposeBody(rawTemplate.body.replace(/{{business_name}}/g, business));
-          }
+        }
+
+        const city = queryParams.get('city');
+        if (city) {
+          setComposeVars(prev => ({ ...prev, city: city }));
+        }
+        
+        // Initial render with all vars
+        const initialVars = {
+           contact_name: extractFirstName(business) || 'Team',
+           business_name: business || '',
+           city: city || 'your city'
+        };
+        
+        if (rawTemplate.body) {
+           let bdy = rawTemplate.body;
+           for (const [k, v] of Object.entries(initialVars)) {
+              bdy = bdy.replace(new RegExp(`{{${k}}}`, 'g'), v);
+           }
+           setComposeBody(bdy);
         }
         
         window.history.replaceState(null, '', window.location.pathname + '#whatsapp');
@@ -132,9 +149,10 @@ const WhatsAppOutreach = () => {
     return firstWord.charAt(0).toUpperCase() + firstWord.slice(1).toLowerCase();
   };
 
-  const getAutoVars = (name, business) => ({
+  const getAutoVars = (name, business, city) => ({
     contact_name: name || extractFirstName(business) || 'Team',
-    business_name: business || ''
+    business_name: business || '',
+    city: city || 'Delhi'
   });
 
   const rerenderFromTemplate = (newVars) => {
