@@ -8,7 +8,7 @@ import {
 import * as XLSX from 'xlsx';
 import './Leads.css';
 
-import API from '../config';
+import API, { WA_API } from '../config';
 
 const Leads = () => {
   const [token] = useState(() => sessionStorage.getItem('adminToken') || '');
@@ -39,8 +39,6 @@ const Leads = () => {
   const [showScrapePanel, setShowScrapePanel] = useState(() => !!sessionStorage.getItem('activeScrapeJob'));
   const [activeJobId, setActiveJobId] = useState(() => sessionStorage.getItem('activeScrapeJob') || null);
 
-  const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
-
   const fetchLeads = useCallback(async () => {
     setLoading(true);
     try {
@@ -54,6 +52,7 @@ const Leads = () => {
         ...(noWebsite && { no_website: 'true' }),
         ...(lowReviews && { low_reviews: 'true' }),
       });
+      const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
       const res = await fetch(`${API}/api/leads?${params}`, { headers });
       const data = await res.json();
       setLeads(data.leads || []);
@@ -68,7 +67,8 @@ const Leads = () => {
 
   const fetchEnrollments = async () => {
     try {
-      const res = await fetch(`${API}/api/wa/enrollments`, { headers });
+      const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+      const res = await fetch(`${WA_API}/api/wa/enrollments`, { headers });
       const data = await res.json();
       const map = {};
       (data.enrollments || []).forEach(e => { map[e.lead_id] = e; });
@@ -88,14 +88,15 @@ const Leads = () => {
     }
     setActionLoading(lead.id);
     try {
-      const res = await fetch(`${API}/api/wa/enroll`, {
+      const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+      const res = await fetch(`${WA_API}/api/wa/enroll`, {
         method: 'POST',
         headers,
         body: JSON.stringify({ 
           lead_id: lead.id,
           phone: lead.phone,
           biz_name: lead.place_name,
-          city: lead.city // City extraction handled by the findCity logic elsewhere
+          city: lead.city 
         })
       });
       const data = await res.json();
@@ -111,7 +112,8 @@ const Leads = () => {
   const stopWASequence = async (leadId) => {
     setActionLoading(leadId);
     try {
-      const res = await fetch(`${API}/api/wa/stop`, {
+      const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+      const res = await fetch(`${WA_API}/api/wa/stop`, {
         method: 'POST',
         headers,
         body: JSON.stringify({ lead_id: leadId })
