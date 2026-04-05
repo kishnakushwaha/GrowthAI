@@ -468,12 +468,20 @@ const WhatsAppOutreach = () => {
                   <button 
                     className="wa-btn wa-btn-primary" 
                     onClick={handleSend}
-                    disabled={!composePhone || !composeBody}
+                    disabled={!composePhone || !composeBody || sending}
                   >
-                    <Send size={18} /> Open in WhatsApp Web
+                    {sending ? (
+                      <><Loader2 size={18} className="spin-icon" /> Sending...</>
+                    ) : engineConnected ? (
+                      <><Send size={18} /> Send Message Automatically</>
+                    ) : (
+                      <><Send size={18} /> Open in WhatsApp Web</>
+                    )}
                   </button>
                   <span className="wa-helper-text">
-                    This will open a new tab directly into your WhatsApp Desktop/Web chat.
+                    {engineConnected 
+                      ? "Message will be sent silently in the background." 
+                      : "This will open a new tab directly into your WhatsApp Desktop/Web chat."}
                   </span>
                 </div>
               </div>
