@@ -39,6 +39,15 @@ const requireAuth = (req, res, next) => {
   next();
 };
 
+app.post('/api/auth/verify', (req, res) => {
+  const { password } = req.body;
+  if (password === ADMIN_PASSWORD) {
+    res.json({ success: true });
+  } else {
+    res.status(401).json({ error: 'Invalid password' });
+  }
+});
+
 // ===================== CONTENT API =====================
 app.get('/api/content', (req, res) => {
   try {

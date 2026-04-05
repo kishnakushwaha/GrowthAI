@@ -77,15 +77,27 @@ const Admin = () => {
   const handleLogin = async (e) => {
     e.preventDefault();
     if (!password) return;
+    setError('');
+    setLoading(true);
     try {
-      const response = await fetch(`${API}/api/content`);
-      if (response.ok) {
+      // 1. Double-verify password against WhatsApp Engine (this is our source of truth for outreach)
+      const res = await fetch(`${API}/api/auth/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
+      });
+      
+      if (res.ok) {
         sessionStorage.setItem('adminToken', password);
         setIsAuthenticated(true);
         fetchContent();
+      } else {
+        setError('Invalid Admin Password');
+        setLoading(false);
       }
     } catch (err) {
-      setError('Server connection failed');
+      setError('Connection to backend failed');
+      setLoading(false);
     }
   };
 
