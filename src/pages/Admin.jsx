@@ -9,7 +9,7 @@ import EmailOutreach from './EmailOutreach';
 import WhatsAppOutreach from './WhatsAppOutreach';
 import CrmPipeline from './CrmPipeline';
 import './Admin.css';
-import API from '../config';
+import API, { WA_API } from '../config';
 
 const Admin = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -81,7 +81,7 @@ const Admin = () => {
     setLoading(true);
     try {
       // 1. Double-verify password against WhatsApp Engine (this is our source of truth for outreach)
-      const res = await fetch(`${API}/api/auth/verify`, {
+      const res = await fetch(`${WA_API}/api/auth/verify`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ password })
