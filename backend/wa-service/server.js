@@ -1,9 +1,16 @@
-require('dotenv').config();
-const express = require('express');
-const cors = require('cors');
-const { Client, LocalAuth } = require('whatsapp-web.js');
-const { pullLocalAuth, pushLocalAuth, clearLocalAuth } = require('./supabaseAuth');
-const qrcode = require('qrcode-terminal');
+import 'dotenv/config';
+import express from 'express';
+import cors from 'cors';
+import { fileURLToPath } from 'url';
+import path from 'path';
+import pkg from 'whatsapp-web.js';
+const { Client, LocalAuth } = pkg;
+import { pullLocalAuth, pushLocalAuth, clearLocalAuth } from './supabaseAuth.js';
+import qrcode from 'qrcode-terminal';
+import supabase from '../supabaseClient.js';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(cors());
@@ -27,10 +34,6 @@ const requireAuth = (req, res, next) => {
 };
 
 const idCache = new Map();
-
-// Import Supabase for stats/logs
-const supabase = require('../supabaseClient');
-
 
 async function startWhatsApp() {
   // Sync the previous session from Supabase (if any) before booting!
@@ -171,7 +174,36 @@ app.post('/api/wa/send', async (req, res) => {
 
 // 4. Disconnect Endpoint
 app.post('/api/wa/disconnect', requireAuth, async (req, res) => {
-  // ... existing logic ...
+  try {
+    console.log('[WA] Disconnection/Logout requested...');
+    isReady = false;
+    currentQr = null;
+    
+    if (waClient) {
+      // Catch any errors from Chromium if it's already dead
+      try {
+        await waClient.logout();
+        await waClient.destroy();
+      } catch(e) {
+        console.log('[WA] Client logout/destroy error (safe to ignore):', e.message);
+      }
+    }
+    
+    // Wipe auth completely
+    await clearLocalAuth();
+    
+    res.json({ success: true, message: 'Disconnected successfully.' });
+    
+    // Reboot the service so a new fresh QR code is generated!
+    setTimeout(() => {
+      console.log('[WA] Rebooting fresh WhatsApp Engine instance...');
+      startWhatsApp();
+    }, 3000);
+    
+  } catch (error) {
+    console.error('[WA] Disconnect error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 // 5. Dashboard Stats

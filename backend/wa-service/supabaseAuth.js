@@ -1,7 +1,11 @@
-const { createClient } = require('@supabase/supabase-js');
-const fs = require('fs');
-const path = require('path');
-const AdmZip = require('adm-zip');
+import { createClient } from '@supabase/supabase-js';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import AdmZip from 'adm-zip';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const AUTH_FOLDER = path.join(__dirname, '.wwebjs_auth');
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -18,9 +22,7 @@ if (!fs.existsSync(AUTH_FOLDER)) {
 }
 
 // Retrieve the session from Supabase Storage or Database
-// For simplicity, we use a single table:
-// CREATE TABLE whatsapp_sessions (id string primary key, data text);
-async function pullLocalAuth() {
+export async function pullLocalAuth() {
   if (!supabase) return;
   console.log('[SupabaseAuth] Attempting to pull session from database...');
   try {
@@ -55,7 +57,7 @@ async function pullLocalAuth() {
 }
 
 // Zip the session folder and push it to Supabase
-async function pushLocalAuth() {
+export async function pushLocalAuth() {
   if (!supabase) return;
   console.log('[SupabaseAuth] Pushing local auth layer to Supabase...');
   try {
@@ -81,7 +83,7 @@ async function pushLocalAuth() {
 }
 
 // Clear the auth from Supabase and delete the local folder
-async function clearLocalAuth() {
+export async function clearLocalAuth() {
   if (supabase) {
     console.log('[SupabaseAuth] Clearing remote auth session...');
     await supabase.from('whatsapp_sessions').delete().eq('id', 'primary');
@@ -92,4 +94,3 @@ async function clearLocalAuth() {
   }
 }
 
-module.exports = { pullLocalAuth, pushLocalAuth, clearLocalAuth };

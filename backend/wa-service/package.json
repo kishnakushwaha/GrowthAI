@@ -1,6 +1,7 @@
 {
   "name": "growthai-whatsapp",
   "version": "1.0.0",
+  "type": "module",
   "description": "WhatsApp Microservice for GrowthAI",
   "scripts": {
     "postinstall": "PUPPETEER_CACHE_DIR=./.cache npx puppeteer browsers install chrome",
