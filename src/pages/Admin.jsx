@@ -80,15 +80,9 @@ const Admin = () => {
     setError('');
     setLoading(true);
     try {
-      // Verify password against the main backend's requireAuth middleware
-      // We send the password as a Bearer token to a protected endpoint
-      const res = await fetch(`${API}/api/content`, {
-        method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${password}`
-        },
-        body: JSON.stringify({})
+      // Verify password using a safe read-only protected endpoint
+      const res = await fetch(`${API}/api/leads`, {
+        headers: { 'Authorization': `Bearer ${password}` }
       });
       
       if (res.status === 401) {
