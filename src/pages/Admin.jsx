@@ -184,14 +184,14 @@ const Admin = () => {
   return (
     <div className="admin-shell">
       {/* Sidebar */}
-      <aside className={`admin-sidebar glass-panel ${sidebarOpen ? 'open' : 'collapsed'}`}>
+      <aside className={`admin-sidebar ${sidebarOpen ? 'open' : ''}`}>
         <div className="sidebar-header">
-          <a href="/" className="sidebar-logo">
-            <Target size={24} color="var(--primary)" />
-            {sidebarOpen && <span>Growth<span className="text-gradient">AI</span></span>}
-          </a>
+          <div className="logo">
+            <Shield size={28} color="var(--primary)" />
+            {sidebarOpen && <span>Growth<span className="text-gradient">AI</span> <span style={{ fontSize: '10px', opacity: 0.5 }}>v1.4</span></span>}
+          </div>
           <button className="sidebar-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>
-            {sidebarOpen ? <X size={18} /> : <Menu size={18} />}
+            {sidebarOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
         </div>
 

@@ -13,9 +13,24 @@ let waClient;
 let isReady = false;
 let currentQr = null;
 
-// Temporary in-memory cache for WhatsApp LIDs (resolved from phone numbers)
-// This makes subsequent sends to the same number near-instant.
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Kishna@321';
+
+// ----------------------
+// AUTH MIDDLEWARE
+// ----------------------
+const requireAuth = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || authHeader !== `Bearer ${ADMIN_PASSWORD}`) {
+    return res.status(401).json({ error: 'Unauthorized access' });
+  }
+  next();
+};
+
 const idCache = new Map();
+
+// Import Supabase for stats/logs
+const supabase = require('../supabaseClient');
+
 
 async function startWhatsApp() {
   // Sync the previous session from Supabase (if any) before booting!
@@ -82,6 +97,17 @@ async function startWhatsApp() {
 // 1. Keep-Alive / Health Endpoint
 app.get('/ping', (req, res) => res.send('pong'));
 
+// 2. Auth Verification Endpoint
+app.post('/api/auth/verify', (req, res) => {
+  const { password } = req.body;
+  if (password === ADMIN_PASSWORD) {
+    res.json({ success: true });
+  } else {
+    res.status(401).json({ error: 'Invalid password' });
+  }
+});
+
+
 // 2. Status Endpoint (Used by GrowthAI Frontend)
 app.get('/api/wa/status', (req, res) => {
   res.json({
@@ -144,38 +170,45 @@ app.post('/api/wa/send', async (req, res) => {
 });
 
 // 4. Disconnect Endpoint
-app.post('/api/wa/disconnect', async (req, res) => {
+app.post('/api/wa/disconnect', requireAuth, async (req, res) => {
+  // ... existing logic ...
+});
+
+// 5. Dashboard Stats
+app.get('/api/wa/stats', async (req, res) => {
   try {
-    console.log('[WA] Disconnection/Logout requested...');
-    isReady = false;
-    currentQr = null;
+    const { data: logs } = await supabase.from('wa_logs').select('status');
+    const { data: enrolls } = await supabase.from('wa_enrollments').select('id').eq('status', 'active');
     
-    if (waClient) {
-      // Catch any errors from Chromium if it's already dead
-      try {
-        await waClient.logout();
-        await waClient.destroy();
-      } catch(e) {
-        console.log('[WA] Client logout/destroy error (safe to ignore):', e.message);
-      }
-    }
+    const stats = {
+      sent: logs?.length || 0,
+      active: enrolls?.length || 0,
+      success: logs?.filter(l => l.status === 'sent').length || 0,
+      failed: logs?.filter(l => l.status === 'failed').length || 0
+    };
     
-    // Wipe auth completely
-    await clearLocalAuth();
-    
-    res.json({ success: true, message: 'Disconnected successfully.' });
-    
-    // Reboot the service so a new fresh QR code is generated!
-    setTimeout(() => {
-      console.log('[WA] Rebooting fresh WhatsApp Engine instance...');
-      startWhatsApp();
-    }, 3000);
-    
-  } catch (error) {
-    console.error('[WA] Disconnect error:', error);
-    res.status(500).json({ success: false, error: error.message });
+    res.json(stats);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch stats' });
   }
 });
+
+// 6. Dashboard Logs
+app.get('/api/wa/logs', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('wa_logs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(100);
+      
+    if (error) throw error;
+    res.json({ logs: data || [] });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch logs' });
+  }
+});
+
 
 // Boot the API — HARDCODED to 4000 because Caddy occupies 80/443 for SSL
 const PORT = 4000;

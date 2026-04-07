@@ -1,5 +1,14 @@
 import supabase from './supabaseClient.js';
 import fetch from 'node-fetch';
+import { v4 as uuidv4 } from 'uuid';
+
+// Helper to wrap URLs for tracking
+function wrapUrls(text, trackingId, baseUrl) {
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  return text.replace(urlRegex, (url) => {
+    return `${baseUrl}/api/track/click/${trackingId}?url=${encodeURIComponent(url)}`;
+  });
+}
 
 const WA_SERVICE_URL = 'http://localhost:4000/api/wa/send';
 

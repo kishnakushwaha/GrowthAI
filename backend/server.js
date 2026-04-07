@@ -18,6 +18,12 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Global Request Logger for Debugging
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
+
 const CONTENT_FILE = path.join(__dirname, 'content.json');
 const SCRAPER_DIR = path.join(__dirname, '..', 'scraper');
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
