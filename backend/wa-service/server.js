@@ -16,6 +16,15 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Global Request Logger for Debugging
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  next();
+});
+
+// Explicit CORS preflight for Auth headers
+app.options('*', cors());
+
 let waClient;
 let isReady = false;
 let currentQr = null;
@@ -50,7 +59,7 @@ async function startWhatsApp() {
         '--disable-gpu',
         '--single-process',
         '--no-zygote',
-        '--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36'
+        '--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/123.0.0.0'
       ]
     }
   });
@@ -242,9 +251,10 @@ app.get('/api/wa/logs', async (req, res) => {
 });
 
 
-// Boot the API — HARDCODED to 4000 because Caddy occupies 80/443 for SSL
-const PORT = 4000;
-app.listen(PORT, () => {
-  console.log(`🚀 WhatsApp Service listening on port ${PORT}`);
+// Boot the API — Use process.env.PORT (from .env) or fallback to 4000
+const PORT = process.env.PORT || 4000;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 WhatsApp Service v1.5 listening on port ${PORT}`);
   startWhatsApp();
 });
+

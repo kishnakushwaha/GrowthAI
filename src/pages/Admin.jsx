@@ -80,23 +80,30 @@ const Admin = () => {
     setError('');
     setLoading(true);
     try {
-      // 1. Double-verify password against WhatsApp Engine (this is our source of truth for outreach)
-      const res = await fetch(`${WA_API}/api/auth/verify`, {
+      // Verify password against the main backend's requireAuth middleware
+      // We send the password as a Bearer token to a protected endpoint
+      const res = await fetch(`${API}/api/content`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ password })
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${password}`
+        },
+        body: JSON.stringify({})
       });
       
-      if (res.ok) {
-        sessionStorage.setItem('adminToken', password);
-        setIsAuthenticated(true);
-        fetchContent();
-      } else {
+      if (res.status === 401) {
         setError('Invalid Admin Password');
         setLoading(false);
+        return;
       }
+      
+      // Password accepted — store and proceed
+      sessionStorage.setItem('adminToken', password);
+      setIsAuthenticated(true);
+      fetchContent();
     } catch (err) {
-      setError('Connection to backend failed');
+      console.error('Login error:', err);
+      setError(`Connection failed: ${err.message}`);
       setLoading(false);
     }
   };
@@ -188,7 +195,7 @@ const Admin = () => {
         <div className="sidebar-header">
           <div className="logo">
             <Shield size={28} color="var(--primary)" />
-            {sidebarOpen && <span>Growth<span className="text-gradient">AI</span> <span style={{ fontSize: '10px', opacity: 0.5 }}>v1.4</span></span>}
+            {sidebarOpen && <span>Growth<span className="text-gradient">AI</span> <span style={{ fontSize: '10px', opacity: 0.5 }}>v1.5</span></span>}
           </div>
           <button className="sidebar-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>
             {sidebarOpen ? <X size={20} /> : <Menu size={20} />}

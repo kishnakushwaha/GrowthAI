@@ -387,7 +387,7 @@ const WhatsAppOutreach = () => {
         <div className="wa-title-area">
           <div className="wa-icon-badge"><MessageCircle size={24} /></div>
           <div>
-            <h1>WhatsApp <span className="text-wa-gradient">Outreach</span> <span style={{ fontSize: '10px', opacity: 0.5, marginLeft: '8px' }}>v1.3</span></h1>
+            <h1>WhatsApp <span className="text-wa-gradient">Outreach</span> <span style={{ fontSize: '10px', opacity: 0.5, marginLeft: '8px' }}>v1.5</span></h1>
             <p className="text-muted">Direct high-conversion messaging with fully automated API engine</p>
           </div>
         </div>
