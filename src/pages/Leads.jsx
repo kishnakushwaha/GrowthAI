@@ -68,7 +68,7 @@ const Leads = () => {
   const fetchEnrollments = async () => {
     try {
       const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
-      const res = await fetch(`${API}/api/wa/enrollments`, { headers });
+      const res = await fetch(`${WA_API}/api/wa/enrollments`, { headers });
       const data = await res.json();
       const map = {};
       (data.enrollments || []).forEach(e => { map[e.lead_id] = e; });
@@ -89,7 +89,7 @@ const Leads = () => {
     setActionLoading(lead.id);
     try {
       const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
-      const res = await fetch(`${API}/api/wa/enroll`, {
+      const res = await fetch(`${WA_API}/api/wa/enroll`, {
         method: 'POST',
         headers,
         body: JSON.stringify({ 
@@ -113,7 +113,7 @@ const Leads = () => {
     setActionLoading(leadId);
     try {
       const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
-      const res = await fetch(`${API}/api/wa/stop`, {
+      const res = await fetch(`${WA_API}/api/wa/stop`, {
         method: 'POST',
         headers,
         body: JSON.stringify({ lead_id: leadId })

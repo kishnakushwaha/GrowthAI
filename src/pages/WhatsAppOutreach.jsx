@@ -3,7 +3,7 @@ import {
   MessageCircle, Send, Settings, FileText, Users, Eye, MousePointer, AlertCircle,
   Loader2, ChevronDown, ChevronUp, Edit3, Plus, X, Check, Smartphone, Activity, WifiOff, CheckCircle2
 } from 'lucide-react';
-import API, { WA_API } from '../config';
+import { WA_API } from '../config';
 import './WhatsAppOutreach.css';
 
 const TEMPLATES_STORAGE_KEY = 'growthai_whatsapp_templates';
@@ -55,7 +55,7 @@ const WhatsAppOutreach = () => {
     const fetchStats = async () => {
       try {
         const token = sessionStorage.getItem('adminToken');
-        const res = await fetch(`${API}/api/wa/stats`, { 
+        const res = await fetch(`${WA_API}/api/wa/stats`, { 
           headers: { 'Authorization': `Bearer ${token}` } 
         });
         const data = await res.json();
@@ -76,7 +76,7 @@ const WhatsAppOutreach = () => {
     setLogsLoading(true);
     try {
       const token = sessionStorage.getItem('adminToken');
-      const res = await fetch(`${API}/api/wa/logs`, { 
+      const res = await fetch(`${WA_API}/api/wa/logs`, { 
         headers: { 'Authorization': `Bearer ${token}` } 
       });
       const data = await res.json();
