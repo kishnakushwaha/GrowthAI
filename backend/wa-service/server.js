@@ -7,7 +7,7 @@ import pkg from 'whatsapp-web.js';
 const { Client, LocalAuth } = pkg;
 import { pullLocalAuth, pushLocalAuth, clearLocalAuth } from './supabaseAuth.js';
 import qrcode from 'qrcode-terminal';
-import supabase from '../supabaseClient.js';
+import supabase from './supabaseClient.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
