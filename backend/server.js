@@ -768,7 +768,10 @@ app.get('/api/track/click/:trackingId', async (req, res) => {
 
 // POST /api/wa/enroll — Start a sequence for a lead
 app.post('/api/wa/enroll', requireAuth, async (req, res) => {
-  const { leadId, phone, bizName, city } = req.body;
+  const leadId = req.body.leadId || req.body.lead_id;
+  const phone = req.body.phone;
+  const bizName = req.body.bizName || req.body.biz_name;
+  const city = req.body.city;
   
   if (!leadId || !phone) {
     return res.status(400).json({ error: 'Lead ID and Phone are required' });
@@ -802,7 +805,7 @@ app.post('/api/wa/enroll', requireAuth, async (req, res) => {
 
 // POST /api/wa/stop — Stop a sequence
 app.post('/api/wa/stop', requireAuth, async (req, res) => {
-  const { leadId } = req.body;
+  const leadId = req.body.leadId || req.body.lead_id;
   
   try {
     const { error } = await supabase
