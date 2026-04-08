@@ -447,7 +447,7 @@ const Leads = () => {
                 <th>Website</th>
                 <th>Address</th>
                 <th>Status</th>
-                <th>Actions</th>
+                <th style={{ minWidth: '200px', width: '200px' }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -508,7 +508,7 @@ const Leads = () => {
                     )}
                   </td>
                   <td>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', minWidth: '160px' }}>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', minWidth: 'max-content', paddingRight: '8px' }}>
                       {lead.maps_url && (
                         <a href={lead.maps_url} target="_blank" rel="noreferrer" className="maps-link" title="Open in Google Maps" style={{ flexShrink: 0 }}>
                           <ExternalLink size={16} />
