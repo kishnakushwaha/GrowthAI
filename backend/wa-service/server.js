@@ -216,6 +216,45 @@ app.post('/api/wa/disconnect', requireAuth, async (req, res) => {
 });
 
 
+// 5. Dashboard Stats
+app.get('/api/wa/stats', async (req, res) => {
+  try {
+    if (!supabase) return res.json({ sent: 0, active: 0, success: 0, failed: 0 });
+    const { data: logs } = await supabase.from('wa_logs').select('status');
+    const { data: enrolls } = await supabase.from('wa_enrollments').select('id').eq('status', 'active');
+    
+    const stats = {
+      sent: logs?.length || 0,
+      active: enrolls?.length || 0,
+      success: logs?.filter(l => l.status === 'sent').length || 0,
+      failed: logs?.filter(l => l.status === 'failed').length || 0
+    };
+    
+    res.json(stats);
+  } catch (err) {
+    console.error('[WA] Stats error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch stats' });
+  }
+});
+
+// 6. Dashboard Logs  
+app.get('/api/wa/logs', async (req, res) => {
+  try {
+    if (!supabase) return res.json({ logs: [] });
+    const { data, error } = await supabase
+      .from('wa_logs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(100);
+      
+    if (error) throw error;
+    res.json({ logs: data || [] });
+  } catch (err) {
+    console.error('[WA] Logs error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch logs' });
+  }
+});
+
 // 7. Enroll a lead in the WA sequence
 app.post('/api/wa/enroll', requireAuth, async (req, res) => {
   const leadId = req.body.leadId || req.body.lead_id;
