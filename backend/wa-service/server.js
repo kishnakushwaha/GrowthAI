@@ -371,7 +371,7 @@ app.post('/api/wa/enroll', requireAuth, async (req, res) => {
         status: 'active',
         current_step: 1,
         next_run_at: new Date().toISOString()
-      })
+      }, { onConflict: 'lead_id' })
       .select('id').single();
 
     if (error) throw error;
