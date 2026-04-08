@@ -6,19 +6,24 @@ import {
 import { WA_API } from '../config';
 import './WhatsAppOutreach.css';
 
-const TEMPLATES_STORAGE_KEY = 'growthai_whatsapp_templates';
+const TEMPLATES_STORAGE_KEY = 'growthai_whatsapp_templates_v2';
 
 // Default templates if none exist
 const DEFAULT_TEMPLATES = [
   {
-    id: 'tpl_wa_1',
-    name: 'Agency Introduction',
-    body: 'Hi *[[contact_name]]*,\n\nI noticed *[[business_name]]* while looking at businesses in [[city]]. We specialize in helping local businesses like yours get more customers through targeted Meta & Google Ads.\n\nWould you be open to a quick 5-min chat this week to see if we can help you grow?'
+    id: 'tpl_wa_high_reply',
+    name: 'Curiosity Opener (High-Reply)',
+    body: 'Hi [[contact_name]],\n\nI came across [[business_name]] while reviewing businesses in [[city]].\n\nI noticed a few missed opportunities where you could get more customer enquiries from Google & Meta Ads — especially from people already searching for your service.\n\nI recorded a quick visibility check for your business.\n\nWould you like me to share it with you here?'
   },
   {
-    id: 'tpl_wa_2',
-    name: 'Missing Website Pitch',
-    body: 'Hello!\n\nI was looking for *[[business_name]]* in [[city]] but couldn\'t find a website. In today\'s digital world, having a professional website is crucial for getting new customers.\n\nWe build highly converting websites starting at affordable rates. Let me know if you\'d like to see some of our recent work!'
+    id: 'tpl_wa_authority',
+    name: 'Authority Version (Lead Gen)',
+    body: 'Hi [[contact_name]],\n\nWhile analysing local businesses in [[city]], I noticed [[business_name]] isn\'t fully capturing leads from Google search traffic yet.\n\nWe help businesses like yours generate consistent enquiries using Google ranking + Meta Ads.\n\nI prepared a short improvement report for your business.\n\nCan I send it here?'
+  },
+  {
+    id: 'tpl_wa_niche',
+    name: 'Niche Specific (Clinic/Real Estate)',
+    body: 'Hi [[contact_name]],\n\nI checked how people search for your services in [[city]] and noticed [[business_name]] is missing some high-intent leads from Google.\n\nUsually businesses in your category generate 20–40 extra enquiries monthly after fixing this.\n\nI made a quick visibility report for you.\n\nShould I share it here?'
   }
 ];
 

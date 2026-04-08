@@ -422,8 +422,8 @@ app.get('/api/wa/enrollments', requireAuth, async (req, res) => {
 // Sequence step templates
 const SEQUENCE_STEPS = [
   { step: 1, delayDays: 0, body: `Hi [[contact_name]],\n\nI came across [[business_name]] while reviewing businesses in [[city]].\n\nI noticed a few missed opportunities where you could get more enquiries from Google search & Meta Ads.\n\nI prepared a short visibility report for your business.\n\nCan I share it here?` },
-  { step: 2, delayDays: 2, body: `Hi [[contact_name]],\n\nJust checking again — while reviewing [[business_name]], I noticed competitors in [[city]] are already capturing leads from Google searches that your business could also receive.\n\nI included those keywords inside the report I prepared.\n\nShould I send it here?` },
-  { step: 3, delayDays: 4, body: `Hi [[contact_name]],\n\nLast message from my side 🙂\n\nWe recently helped similar businesses improve enquiry flow through Google visibility improvements and targeted ads.\n\nI had prepared a quick suggestion report for [[business_name]] as well.\n\nLet me know if you'd like me to share it.` }
+  { step: 2, delayDays: 3, body: `Hi [[contact_name]],\n\nJust checking again — while reviewing [[business_name]], I noticed competitors in [[city]] are already capturing leads from Google searches that your business could also receive.\n\nI included those keywords inside the report I prepared.\n\nShould I send it here?` },
+  { step: 3, delayDays: 7, body: `Hi [[contact_name]],\n\nLast message from my side 🙂\n\nWe recently helped similar businesses improve enquiry flow through Google visibility improvements and targeted ads.\n\nI had prepared a quick suggestion report for [[business_name]] as well.\n\nLet me know if you'd like me to share it.` }
 ];
 
 // Send a single sequence step
