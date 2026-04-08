@@ -135,7 +135,7 @@ app.post('/api/wa/send', async (req, res) => {
   }
 
   try {
-    const { phone, message } = req.body;
+    const { phone, message, bizName, leadId } = req.body;
     if (!phone || !message) {
       return res.status(400).json({ success: false, error: 'Phone and message required.' });
     }
@@ -174,9 +174,38 @@ app.post('/api/wa/send', async (req, res) => {
     
     console.log(`[WA] ✅ Sent message to ${cleanedPhone} in ${sendTime}ms`);
     
+    // Log to Supabase wa_logs for Activity tracking
+    try {
+      await supabase.from('wa_logs').insert({
+        phone: cleanedPhone,
+        biz_name: bizName || 'Unknown',
+        message: message.substring(0, 500),
+        type: 'manual',
+        status: 'sent',
+        lead_id: leadId || null
+      });
+      console.log(`[WA] 📝 Logged message to wa_logs`);
+    } catch (logErr) {
+      console.error('[WA] Failed to log message:', logErr.message);
+    }
+    
     res.json({ success: true, message: 'Message sent successfully!', total_ms: Date.now() });
   } catch (error) {
     console.error('[WA] Send error:', error);
+    
+    // Log failed attempt too
+    try {
+      const { phone, bizName, message, leadId } = req.body;
+      await supabase.from('wa_logs').insert({
+        phone: phone?.replace(/[^0-9]/g, '') || 'unknown',
+        biz_name: bizName || 'Unknown',
+        message: (message || '').substring(0, 500),
+        type: 'manual',
+        status: 'failed',
+        lead_id: leadId || null
+      });
+    } catch (e) {}
+    
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -252,6 +281,39 @@ app.get('/api/wa/logs', async (req, res) => {
   } catch (err) {
     console.error('[WA] Logs error:', err.message);
     res.status(500).json({ error: 'Failed to fetch logs' });
+  }
+});
+
+// 6b. Get list of all sent phone numbers (for duplicate prevention)
+app.get('/api/wa/sent-phones', async (req, res) => {
+  try {
+    if (!supabase) return res.json({ phones: [] });
+    const { data, error } = await supabase
+      .from('wa_logs')
+      .select('phone, biz_name, status, created_at')
+      .eq('status', 'sent')
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    
+    // Build a map of unique phones with their latest send info
+    const phoneMap = {};
+    (data || []).forEach(log => {
+      if (!phoneMap[log.phone]) {
+        phoneMap[log.phone] = {
+          phone: log.phone,
+          biz_name: log.biz_name,
+          last_sent: log.created_at,
+          count: 1
+        };
+      } else {
+        phoneMap[log.phone].count++;
+      }
+    });
+    
+    res.json({ phones: Object.values(phoneMap) });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch sent phones' });
   }
 });
 

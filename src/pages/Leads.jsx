@@ -14,6 +14,7 @@ const Leads = () => {
   const [token] = useState(() => sessionStorage.getItem('adminToken') || '');
   const [leads, setLeads] = useState([]);
   const [enrollments, setEnrollments] = useState({});
+  const [sentPhones, setSentPhones] = useState({});
   const [total, setTotal] = useState(0);
   const [stats, setStats] = useState({});
   const [industries, setIndustries] = useState([]);
@@ -76,9 +77,26 @@ const Leads = () => {
     } catch (err) { console.error('Failed to fetch enrollments'); }
   };
 
+  const fetchSentPhones = async () => {
+    try {
+      const res = await fetch(`${WA_API}/api/wa/sent-phones`);
+      const data = await res.json();
+      const map = {};
+      (data.phones || []).forEach(p => {
+        // Normalize phone: strip leading 91 for 12-digit numbers
+        let phone = p.phone;
+        if (phone.length === 12 && phone.startsWith('91')) phone = phone.slice(2);
+        map[phone] = p;
+        map[p.phone] = p; // also keep original
+      });
+      setSentPhones(map);
+    } catch (err) { console.error('Failed to fetch sent phones'); }
+  };
+
   useEffect(() => { 
     fetchLeads(); 
     fetchEnrollments();
+    fetchSentPhones();
   }, [fetchLeads]);
 
   const startWASequence = async (lead) => {
@@ -448,9 +466,25 @@ const Leads = () => {
                   <td>{lead.reviews || '0'}</td>
                   <td>
                     {lead.phone !== 'N/A' ? (
-                      <a href={`tel:${lead.phone}`} className="phone-link">
-                        <Phone size={14} /> {lead.phone}
-                      </a>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <a href={`tel:${lead.phone}`} className="phone-link">
+                          <Phone size={14} /> {lead.phone}
+                        </a>
+                        {(() => {
+                          const cleanPhone = lead.phone?.replace(/[^0-9]/g, '') || '';
+                          const sent = sentPhones[cleanPhone] || sentPhones['91' + cleanPhone];
+                          if (sent) return (
+                            <span style={{ 
+                              fontSize: '9px', fontWeight: 'bold', padding: '2px 5px', 
+                              borderRadius: '4px', background: '#059669', color: '#fff',
+                              whiteSpace: 'nowrap'
+                            }}>
+                              ✓ SENT{sent.count > 1 ? ` x${sent.count}` : ''}
+                            </span>
+                          );
+                          return null;
+                        })()}
+                      </div>
                     ) : <span className="text-muted">—</span>}
                   </td>
                   <td>
