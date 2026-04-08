@@ -341,11 +341,10 @@ const WhatsAppOutreach = () => {
   const handleDisconnect = async () => {
     if (!window.confirm("Are you sure you want to disconnect the WhatsApp engine? You will need to re-scan the QR code to link your device again.")) return;
     
-    // Optimistically update UI
     setEngineConnected(false);
     
     try {
-      const token = localStorage.getItem('admin_token');
+      const token = sessionStorage.getItem('adminToken');
       await fetch(`${WA_API}/api/wa/disconnect`, {
         method: 'POST',
         headers: { 
@@ -355,6 +354,26 @@ const WhatsAppOutreach = () => {
       });
     } catch (e) {
       console.error("Disconnect API failed:", e);
+    }
+  };
+
+  const handleReconnect = async () => {
+    try {
+      const token = sessionStorage.getItem('adminToken');
+      const res = await fetch(`${WA_API}/api/wa/reconnect`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+      });
+      const data = await res.json();
+      if (data.success) {
+        alert('Reconnecting... A QR code will appear in a few seconds. Please wait and then scan it with your phone.');
+      }
+    } catch (e) {
+      console.error("Reconnect API failed:", e);
+      alert("Failed to reconnect. The server might be down.");
     }
   };
 
@@ -402,9 +421,13 @@ const WhatsAppOutreach = () => {
               </button>
             </div>
           ) : (
-            <div className="badge warning" style={{ padding: '8px 16px', borderRadius: '10px' }}>
-              <AlertCircle size={16} /> Engine Offline (Manual Mode)
-            </div>
+            <button 
+              className="btn btn-primary" 
+              onClick={handleReconnect}
+              style={{ background: '#25D366', borderColor: '#25D366', padding: '8px 20px', display: 'flex', alignItems: 'center', gap: '8px' }}
+            >
+              <Smartphone size={16} /> Reconnect WhatsApp
+            </button>
           )}
         </div>
       </div>

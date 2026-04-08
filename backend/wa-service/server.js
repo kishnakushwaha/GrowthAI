@@ -244,6 +244,38 @@ app.post('/api/wa/disconnect', requireAuth, async (req, res) => {
   }
 });
 
+// 4b. Reconnect Endpoint — Force re-initialize to get a new QR code
+app.post('/api/wa/reconnect', requireAuth, async (req, res) => {
+  try {
+    console.log('[WA] Reconnection requested — clearing old session...');
+    isReady = false;
+    currentQr = null;
+
+    if (waClient) {
+      try {
+        await waClient.destroy();
+      } catch (e) {
+        console.log('[WA] Client destroy error (safe to ignore):', e.message);
+      }
+    }
+
+    // Clear old auth data
+    await clearLocalAuth();
+
+    res.json({ success: true, message: 'Reconnecting... QR code will appear shortly.' });
+
+    // Reboot WhatsApp Engine after a brief delay
+    setTimeout(() => {
+      console.log('[WA] Booting fresh WhatsApp Engine for new QR...');
+      startWhatsApp();
+    }, 2000);
+
+  } catch (error) {
+    console.error('[WA] Reconnect error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 
 // 5. Dashboard Stats
 app.get('/api/wa/stats', async (req, res) => {
