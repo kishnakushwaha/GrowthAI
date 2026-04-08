@@ -185,7 +185,7 @@ const Admin = () => {
   return (
     <div className="admin-shell">
       {/* Sidebar */}
-      <aside className={`admin-sidebar ${sidebarOpen ? 'open' : ''}`}>
+      <aside className={`admin-sidebar glass-panel ${!sidebarOpen ? 'collapsed' : ''}`}>
         <div className="sidebar-header">
           <div className="logo">
             <Shield size={28} color="var(--primary)" />
