@@ -578,7 +578,7 @@ const Leads = () => {
                             onClick={() => stopWASequence(lead.id)}
                             disabled={actionLoading === lead.id}
                             title="Stop Automated Sequence"
-                            style={{ background: '#fee2e2', border: 'none', padding: '4px', borderRadius: '4px', color: '#dc2626', cursor: 'pointer', display: 'flex', flexShrink: 0 }}
+                            style={{ background: '#fee2e2', border: 'none', padding: '4px', borderRadius: '4px', color: '#dc2626', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: '24px', minHeight: '24px', flexShrink: 0 }}
                           >
                             <Square size={14} fill="#dc2626" />
                           </button>
@@ -587,7 +587,7 @@ const Leads = () => {
                             onClick={() => startWASequence(lead)}
                             disabled={actionLoading === lead.id || lead.phone === 'N/A' || !lead.phone}
                             title="Start 3-Step WhatsApp Sequence"
-                            style={{ background: '#ecfdf5', border: 'none', padding: '4px', borderRadius: '4px', color: '#059669', cursor: 'pointer', opacity: (lead.phone === 'N/A' || !lead.phone) ? 0.5 : 1, display: 'flex', flexShrink: 0 }}
+                            style={{ background: '#ecfdf5', border: 'none', padding: '4px', borderRadius: '4px', color: '#059669', cursor: 'pointer', opacity: (lead.phone === 'N/A' || !lead.phone) ? 0.5 : 1, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minWidth: '24px', minHeight: '24px', flexShrink: 0 }}
                           >
                             {actionLoading === lead.id ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} fill="#059669" />}
                           </button>
