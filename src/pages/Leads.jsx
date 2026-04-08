@@ -508,9 +508,9 @@ const Leads = () => {
                     )}
                   </td>
                   <td>
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center', minWidth: '160px' }}>
                       {lead.maps_url && (
-                        <a href={lead.maps_url} target="_blank" rel="noreferrer" className="maps-link" title="Open in Google Maps">
+                        <a href={lead.maps_url} target="_blank" rel="noreferrer" className="maps-link" title="Open in Google Maps" style={{ flexShrink: 0 }}>
                           <ExternalLink size={16} />
                         </a>
                       )}
@@ -522,7 +522,7 @@ const Leads = () => {
                           const businessName = lead.place_name || '';
                           window.location.hash = `#emails?email=${encodeURIComponent(targetEmail)}&business=${encodeURIComponent(businessName)}`;
                         }}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', padding: '4px', borderRadius: '4px' }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent)', padding: '4px', borderRadius: '4px', flexShrink: 0 }}
                       >
                         <Mail size={16} />
                       </button>
@@ -566,19 +566,19 @@ const Leads = () => {
                           const cityName = findCity(lead.address, lead.industry);
                           window.location.hash = `#whatsapp?phone=${encodeURIComponent(targetPhone)}&business=${encodeURIComponent(businessName)}&city=${encodeURIComponent(cityName)}`;
                         }}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#25D366', padding: '4px', borderRadius: '4px' }}
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#25D366', padding: '4px', borderRadius: '4px', flexShrink: 0 }}
                       >
                         <MessageCircle size={16} />
                       </button>
 
                       {/* START/STOP AUTOMATION BUTTONS */}
-                      <div className="automation-controls" style={{ display: 'flex', gap: '4px', marginLeft: '8px', borderLeft: '1px solid #eee', paddingLeft: '8px' }}>
+                      <div className="automation-controls" style={{ display: 'flex', gap: '6px', marginLeft: '6px', borderLeft: '1px solid var(--border-light)', paddingLeft: '8px', flexShrink: 0, alignItems: 'center' }}>
                         {enrollments[lead.id]?.status === 'active' ? (
                           <button 
                             onClick={() => stopWASequence(lead.id)}
                             disabled={actionLoading === lead.id}
                             title="Stop Automated Sequence"
-                            style={{ background: '#fee2e2', border: 'none', padding: '4px', borderRadius: '4px', color: '#dc2626', cursor: 'pointer' }}
+                            style={{ background: '#fee2e2', border: 'none', padding: '4px', borderRadius: '4px', color: '#dc2626', cursor: 'pointer', display: 'flex', flexShrink: 0 }}
                           >
                             <Square size={14} fill="#dc2626" />
                           </button>
@@ -587,14 +587,14 @@ const Leads = () => {
                             onClick={() => startWASequence(lead)}
                             disabled={actionLoading === lead.id || lead.phone === 'N/A' || !lead.phone}
                             title="Start 3-Step WhatsApp Sequence"
-                            style={{ background: '#ecfdf5', border: 'none', padding: '4px', borderRadius: '4px', color: '#059669', cursor: 'pointer', opacity: (lead.phone === 'N/A' || !lead.phone) ? 0.5 : 1 }}
+                            style={{ background: '#ecfdf5', border: 'none', padding: '4px', borderRadius: '4px', color: '#059669', cursor: 'pointer', opacity: (lead.phone === 'N/A' || !lead.phone) ? 0.5 : 1, display: 'flex', flexShrink: 0 }}
                           >
                             {actionLoading === lead.id ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} fill="#059669" />}
                           </button>
                         )}
                         
                         {enrollments[lead.id] && (
-                          <div style={{ fontSize: '10px', color: enrollments[lead.id].status === 'active' ? '#059669' : '#6b7280', display: 'flex', alignItems: 'center', fontWeight: 'bold' }}>
+                          <div style={{ fontSize: '10px', color: enrollments[lead.id].status === 'active' ? '#059669' : '#6b7280', display: 'flex', alignItems: 'center', fontWeight: 'bold', whiteSpace: 'nowrap', flexShrink: 0 }}>
                             {enrollments[lead.id].status === 'active' ? `STEP ${enrollments[lead.id].current_step}` : 'PAUSED'}
                           </div>
                         )}
