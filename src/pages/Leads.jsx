@@ -159,6 +159,7 @@ const Leads = () => {
     // Fetch immediately on mount to not wait 2 seconds for first update UI
     const checkJob = async () => {
       try {
+        const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
         const res = await fetch(`${API}/api/scan-leads/${activeJobId}`, { headers });
         const job = await res.json();
         setScrapeLog(job.output || []);
@@ -174,6 +175,7 @@ const Leads = () => {
 
     const interval = setInterval(async () => {
       try {
+        const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
         const res = await fetch(`${API}/api/scan-leads/${activeJobId}`, { headers });
         const job = await res.json();
         setScrapeLog(job.output || []);
@@ -195,6 +197,7 @@ const Leads = () => {
     setScrapeLog(['Starting scraper...']);
     sessionStorage.setItem('scrapeQuery', scrapeQuery);
     try {
+      const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
       const res = await fetch(`${API}/api/scan-leads`, {
         method: 'POST', headers,
         body: JSON.stringify({ query: scrapeQuery, count: scrapeCount })
@@ -212,6 +215,7 @@ const Leads = () => {
   };
 
   const fetchExportData = async () => {
+    const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
     const res = await fetch(`${API}/api/leads/export`, { headers });
     if (!res.ok) throw new Error('Export failed to fetch');
     const textData = await res.text();
@@ -222,6 +226,7 @@ const Leads = () => {
 
   const exportCSV = async () => {
     try {
+      const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
       const res = await fetch(`${API}/api/leads/export`, { headers });
       if (!res.ok) throw new Error('Export failed');
       const blob = await res.blob();
