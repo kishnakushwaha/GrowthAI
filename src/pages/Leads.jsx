@@ -159,7 +159,7 @@ const Leads = () => {
     // Fetch immediately on mount to not wait 2 seconds for first update UI
     const checkJob = async () => {
       try {
-        const res = await fetch(`${API}/api/scrape/${activeJobId}`, { headers });
+        const res = await fetch(`${API}/api/scan-leads/${activeJobId}`, { headers });
         const job = await res.json();
         setScrapeLog(job.output || []);
         if (job.status !== 'running') {
@@ -174,7 +174,7 @@ const Leads = () => {
 
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`${API}/api/scrape/${activeJobId}`, { headers });
+        const res = await fetch(`${API}/api/scan-leads/${activeJobId}`, { headers });
         const job = await res.json();
         setScrapeLog(job.output || []);
         if (job.status !== 'running') {
@@ -195,14 +195,18 @@ const Leads = () => {
     setScrapeLog(['Starting scraper...']);
     sessionStorage.setItem('scrapeQuery', scrapeQuery);
     try {
-      const res = await fetch(`${API}/api/scrape`, {
+      const res = await fetch(`${API}/api/scan-leads`, {
         method: 'POST', headers,
         body: JSON.stringify({ query: scrapeQuery, count: scrapeCount })
       });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Server returned ${res.status}: ${errText}`);
+      }
       const data = await res.json();
       setActiveJobId(data.jobId);
     } catch (err) {
-      setScrapeLog(['Failed to start scraper']);
+      setScrapeLog([`Failed to start: ${err.message}`]);
       setScraping(false);
     }
   };
