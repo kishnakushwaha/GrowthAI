@@ -161,8 +161,8 @@ app.get('/api/leads/export', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/scan-leads — Trigger a new scrape
-app.post('/api/scan-leads', requireAuth, (req, res) => {
+// POST /api/scrape — Trigger a new scrape
+app.post('/api/scrape', requireAuth, (req, res) => {
   const { query, count = 10 } = req.body;
 
   if (!query) {
@@ -213,8 +213,8 @@ app.post('/api/scan-leads', requireAuth, (req, res) => {
   res.json({ jobId, message: `Scrape started for "${query}" (${count} leads)` });
 });
 
-// GET /api/scan-leads/:jobId — Check scrape job status
-app.get('/api/scan-leads/:jobId', requireAuth, (req, res) => {
+// GET /api/scrape/:jobId — Check scrape job status
+app.get('/api/scrape/:jobId', requireAuth, (req, res) => {
   const job = activeJobs[req.params.jobId];
   if (!job) {
     return res.status(404).json({ error: 'Job not found' });

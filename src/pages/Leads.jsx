@@ -160,7 +160,7 @@ const Leads = () => {
     const checkJob = async () => {
       try {
         const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
-        const res = await fetch(`${API}/api/scan-leads/${activeJobId}`, { headers });
+        const res = await fetch(`${API}/api/scrape/${activeJobId}`, { headers });
         const job = await res.json();
         setScrapeLog(job.output || []);
         if (job.status !== 'running') {
@@ -176,7 +176,7 @@ const Leads = () => {
     const interval = setInterval(async () => {
       try {
         const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
-        const res = await fetch(`${API}/api/scan-leads/${activeJobId}`, { headers });
+        const res = await fetch(`${API}/api/scrape/${activeJobId}`, { headers });
         const job = await res.json();
         setScrapeLog(job.output || []);
         if (job.status !== 'running') {
@@ -198,7 +198,7 @@ const Leads = () => {
     sessionStorage.setItem('scrapeQuery', scrapeQuery);
     try {
       const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
-      const res = await fetch(`${API}/api/scan-leads`, {
+      const res = await fetch(`${API}/api/scrape`, {
         method: 'POST', headers,
         body: JSON.stringify({ query: scrapeQuery, count: scrapeCount })
       });
