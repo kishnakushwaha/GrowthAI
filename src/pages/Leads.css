@@ -148,6 +148,10 @@
   font-size: 0.85rem;
   font-family: inherit;
   cursor: pointer;
+  width: 100%;
+  max-width: 100%;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .filter-select option {

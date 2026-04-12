@@ -1,0 +1,28 @@
+{
+  "manifest_version": 3,
+  "name": "GrowthAI Automation Agent",
+  "version": "1.0",
+  "description": "Background automation node for GrowthAI drip campaigns and robust reply tracking.",
+  "permissions": [
+    "alarms",
+    "storage",
+    "scripting",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://web.whatsapp.com/*",
+    "https://mail.google.com/*",
+    "http://localhost:3001/*",
+    "https://*.run.app/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://web.whatsapp.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

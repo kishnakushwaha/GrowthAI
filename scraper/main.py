@@ -4,6 +4,7 @@ import sys
 import urllib.parse
 from playwright.async_api import async_playwright
 from database import init_db, save_lead, export_to_csv, supabase
+from deep_scraper import enrich_lead
 
 async def scrape_google_maps(query, item_limit=20):
     print(f"🚀 Starting scraper for: '{query}'")
@@ -196,10 +197,16 @@ async def scrape_google_maps(query, item_limit=20):
                         "maps_url": maps_url
                     }
                     
-                    is_new = save_lead(lead_data)
-                    if is_new:
+                    lead_id = save_lead(lead_data)
+                    if lead_id:
                         print(f"✅ {name} | ⭐ {rating} ({reviews} reviews) | 📞 {phone} | 🌐 {'Yes' if website != 'N/A' else 'No'}")
                         extracted_count += 1
+                        
+                        # Phase 2: Call Deep Website Scraper
+                        try:
+                            await enrich_lead(context, lead_id, lead_data)
+                        except Exception as enrich_err:
+                            print(f"⚠️ Deep enrichment error: {enrich_err}")
                         
                 except Exception as e:
                     print(f"Error extracting an item: {str(e)[:120]}")

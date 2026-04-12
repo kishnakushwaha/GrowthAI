@@ -161,65 +161,112 @@ app.get('/api/leads/export', requireAuth, async (req, res) => {
   }
 });
 
+// ===================== QUEUE WORKER =====================
+setInterval(async () => {
+  try {
+    const { data } = await supabase.from('scrape_jobs').select('*').eq('status', 'pending').order('created_at', { ascending: true }).limit(1);
+    if (!data || data.length === 0) return;
+
+    const job = data[0];
+    const jobId = job.id.toString();
+
+    // Mark as running
+    await supabase.from('scrape_jobs').update({ status: 'running', started_at: new Date().toISOString() }).eq('id', job.id);
+
+    activeJobs[jobId] = {
+      status: 'running',
+      query: job.query,
+      count: job.target_count,
+      output: [],
+      startedAt: new Date().toISOString()
+    };
+
+    let pythonPath = path.join(SCRAPER_DIR, 'venv', 'bin', 'python');
+    if (process.env.NODE_ENV === 'production' || !fs.existsSync(pythonPath)) {
+      pythonPath = 'python3';
+    }
+
+    const scraperScript = path.join(SCRAPER_DIR, 'main.py');
+    const proc = spawn(pythonPath, [scraperScript, job.query, job.target_count.toString()], {
+      cwd: SCRAPER_DIR,
+      env: { ...process.env, PYTHONUNBUFFERED: '1' }
+    });
+
+    proc.stdout.on('data', (data) => {
+      const lines = data.toString().split('\n').filter(l => l.trim());
+      activeJobs[jobId].output.push(...lines);
+      console.log(`[Scraper ${jobId}]`, data.toString().trim());
+    });
+
+    proc.stderr.on('data', (data) => {
+      activeJobs[jobId].output.push(`ERROR: ${data.toString().trim()}`);
+      console.error(`[Scraper ${jobId} ERR]`, data.toString().trim());
+    });
+
+    proc.on('close', async (code) => {
+      const status = code === 0 ? 'completed' : 'failed';
+      activeJobs[jobId].status = status;
+      activeJobs[jobId].completedAt = new Date().toISOString();
+      await supabase.from('scrape_jobs').update({ 
+        status, 
+        completed_at: new Date().toISOString(),
+        error_log: code !== 0 ? activeJobs[jobId].output.join('\n') : null
+      }).eq('id', job.id);
+    });
+
+  } catch (err) {
+    console.error('Queue worker error:', err);
+  }
+}, 5000);
+
 // POST /api/scrape — Trigger a new scrape
-app.post('/api/scrape', requireAuth, (req, res) => {
+app.post('/api/scrape', requireAuth, async (req, res) => {
   const { query, count = 10 } = req.body;
 
   if (!query) {
     return res.status(400).json({ error: 'Search query is required' });
   }
 
-  const jobId = Date.now().toString();
+  try {
+    const { data, error } = await supabase.from('scrape_jobs').insert({
+      query,
+      target_count: count
+    }).select('id').single();
 
-  activeJobs[jobId] = {
-    status: 'running',
-    query,
-    count,
-    output: [],
-    startedAt: new Date().toISOString()
-  };
+    if (error) throw error;
 
-  // Spawn the Python scraper
-  let pythonPath = path.join(SCRAPER_DIR, 'venv', 'bin', 'python');
-  
-  // In production or if venv doesn't exist, use system python3
-  if (process.env.NODE_ENV === 'production' || !fs.existsSync(pythonPath)) {
-    pythonPath = 'python3';
+    res.json({ jobId: data.id.toString(), message: `Scrape queued for "${query}" (${count} leads)` });
+  } catch (err) {
+    console.error('Failed to queue job', err);
+    res.status(500).json({ error: 'Failed to queue job' });
   }
-
-  const scraperScript = path.join(SCRAPER_DIR, 'main.py');
-
-  const proc = spawn(pythonPath, [scraperScript, query, count.toString()], {
-    cwd: SCRAPER_DIR,
-    env: { ...process.env, PYTHONUNBUFFERED: '1' }
-  });
-
-  proc.stdout.on('data', (data) => {
-    const lines = data.toString().split('\n').filter(l => l.trim());
-    activeJobs[jobId].output.push(...lines);
-    console.log(`[Scraper ${jobId}]`, data.toString().trim());
-  });
-
-  proc.stderr.on('data', (data) => {
-    activeJobs[jobId].output.push(`ERROR: ${data.toString().trim()}`);
-    console.error(`[Scraper ${jobId} ERR]`, data.toString().trim());
-  });
-
-  proc.on('close', (code) => {
-    activeJobs[jobId].status = code === 0 ? 'completed' : 'failed';
-    activeJobs[jobId].completedAt = new Date().toISOString();
-  });
-
-  res.json({ jobId, message: `Scrape started for "${query}" (${count} leads)` });
 });
 
 // GET /api/scrape/:jobId — Check scrape job status
-app.get('/api/scrape/:jobId', requireAuth, (req, res) => {
-  const job = activeJobs[req.params.jobId];
-  if (!job) {
-    return res.status(404).json({ error: 'Job not found' });
+app.get('/api/scrape/:jobId', requireAuth, async (req, res) => {
+  const jobId = req.params.jobId;
+  const activeJob = activeJobs[jobId];
+  
+  if (activeJob) {
+    return res.json(activeJob);
   }
-  res.json(job);
+
+  // Not in memory, check DB (might be completed or pending)
+  try {
+    const { data } = await supabase.from('scrape_jobs').select('*').eq('id', jobId).single();
+    if (data) {
+      return res.json({
+        status: data.status,
+        query: data.query,
+        count: data.target_count,
+        output: data.error_log ? ["Job Finished.", data.error_log] : ["Job Finished."],
+        startedAt: data.created_at,
+        completedAt: data.completed_at
+      });
+    }
+  } catch (err) {}
+
+  res.status(404).json({ error: 'Job not found' });
 });
 
 // ===================== AUDIT API (Supabase) =====================
