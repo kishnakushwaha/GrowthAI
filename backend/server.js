@@ -81,11 +81,14 @@ app.get('/api/leads', requireAuth, async (req, res) => {
   try {
     const { industry, min_rating, hot_only, no_website, low_reviews, search, sort_by, sort_dir, page = 1, limit = 50 } = req.query;
 
-    let query = supabase.from('businesses').select('*', { count: 'exact' });
+    let query = supabase.from('businesses').select('*, website_enrichment(*)', { count: 'exact' });
 
     if (industry) query = query.ilike('industry', `%${industry}%`);
     if (min_rating) query = query.gte('rating', parseFloat(min_rating));
-    if (hot_only === 'true') query = query.eq('is_hot_lead', true);
+    if (hot_only === 'true') {
+      // Legacy flag + New metric flag
+      query = query.or('is_hot_lead.eq.true,lead_score.gte.60');
+    }
     if (no_website === 'true') query = query.or("website.is.null,website.eq.,website.eq.N/A");
     if (low_reviews === 'true') query = query.lt('reviews', 15);
     if (search) {
@@ -93,7 +96,7 @@ app.get('/api/leads', requireAuth, async (req, res) => {
     }
 
     // Sorting
-    const allowedSorts = ['place_name', 'rating', 'reviews', 'scraped_at', 'is_hot_lead'];
+    const allowedSorts = ['place_name', 'rating', 'reviews', 'scraped_at', 'is_hot_lead', 'lead_score'];
     const sortField = allowedSorts.includes(sort_by) ? sort_by : 'scraped_at';
     const ascending = sort_dir === 'asc';
     query = query.order(sortField, { ascending });
@@ -110,7 +113,7 @@ app.get('/api/leads', requireAuth, async (req, res) => {
     const all = allBiz || [];
     const stats = {
       total: all.length,
-      hot_leads: all.filter(b => b.is_hot_lead).length,
+      hot_leads: all.filter(b => b.is_hot_lead || b.lead_score >= 60).length,
       no_website: all.filter(b => !b.website || b.website === 'N/A' || b.website === '').length,
       avg_rating: all.length > 0
         ? (all.filter(b => b.rating).reduce((s, b) => s + (parseFloat(b.rating) || 0), 0) / all.filter(b => b.rating).length).toFixed(1)
@@ -267,6 +270,57 @@ app.get('/api/scrape/:jobId', requireAuth, async (req, res) => {
   } catch (err) {}
 
   res.status(404).json({ error: 'Job not found' });
+});
+
+// ===================== EXTENSION API =====================
+
+app.get('/api/extension/pending-tasks', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('outreach_log')
+      .select('id, channel, template_used, businesses!inner(phone)')
+      .eq('status', 'enqueued')
+      .limit(5);
+    
+    if (error) throw error;
+    res.json(data || []);
+  } catch (err) {
+    console.error('Queue fetch error:', err);
+    res.status(500).json({ error: 'Failed to fetch tasks' });
+  }
+});
+
+app.post('/api/extension/log-reply', async (req, res) => {
+  const { phone } = req.body;
+  if (!phone) return res.status(400).json({ error: 'Phone required' });
+  
+  try {
+    // Exact match deduplication means we can look up by phone natively
+    const { data: leadData } = await supabase.from('businesses').select('id').eq('phone', phone).limit(1).single();
+    if (!leadData) return res.status(404).json({ error: 'Lead not found' });
+
+    const { error } = await supabase.from('outreach_log')
+      .update({ status: 'replied', reply_detected_at: new Date().toISOString() })
+      .eq('lead_id', leadData.id)
+      .neq('status', 'replied'); // only update if not already replied
+      
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Log reply error:', err);
+    res.status(500).json({ error: 'Failed to log reply' });
+  }
+});
+
+app.post('/api/extension/update-status', async (req, res) => {
+  const { log_id, status } = req.body;
+  try {
+    const { error } = await supabase.from('outreach_log').update({ status }).eq('id', log_id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update' });
+  }
 });
 
 // ===================== AUDIT API (Supabase) =====================

@@ -17,18 +17,36 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
 async function pollForTasks() {
   console.log("Polling backend for pending sequence tasks...");
-  // In a full implementation, you would hit your Express backend:
-  // const response = await fetch(`${API_BASE_URL}/extension/pending-tasks`);
-  // const tasks = await response.json();
-  
-  // For now, we will wait until the backend endpoints are built.
+  try {
+    const response = await fetch(`${API_BASE_URL}/extension/pending-tasks`);
+    const tasks = await response.json();
+    
+    if (tasks && tasks.length > 0) {
+      console.log(`Found ${tasks.length} pending tasks!`);
+      // Here you would find a WhatsApp Web tab and inject a SEND_WHATSAPP command
+      // For now we just log them.
+      for (const t of tasks) {
+         console.log("Pending:", t);
+      }
+    }
+  } catch (e) {
+    console.error("Failed to poll backend:", e);
+  }
 }
 
 // Listen for messages from the content script (e.g., when a reply is detected)
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
   if (message.type === "REPLY_DETECTED") {
     console.log("🔥 Reply detected from:", message.phone);
-    // Send to backend to update outreach_log:
-    // fetch(`${API_BASE_URL}/extension/log-reply`, { method: 'POST', body: JSON.stringify(message) })
+    try {
+      await fetch(`${API_BASE_URL}/extension/log-reply`, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: message.phone }) 
+      });
+      console.log("Successfully logged reply to Supabase!");
+    } catch(e) {
+      console.error("Failed to push reply to backend", e);
+    }
   }
 });

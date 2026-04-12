@@ -20,6 +20,7 @@ const Leads = () => {
   const [industries, setIndustries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(null);
+  const [toast, setToast] = useState(null);
 
   // Filters
   const [search, setSearch] = useState('');
@@ -167,6 +168,9 @@ const Leads = () => {
           setScraping(false);
           setActiveJobId(null);
           sessionStorage.removeItem('activeScrapeJob');
+          // Show toast Notification
+          setToast(`🎉 Scrape Complete: Extracted ${job.count} leads!`);
+          setTimeout(() => setToast(null), 4000);
           fetchLeads(); // Refresh leads
         }
       } catch (err) { console.error(err); }
@@ -184,6 +188,8 @@ const Leads = () => {
           setActiveJobId(null);
           sessionStorage.removeItem('activeScrapeJob');
           clearInterval(interval);
+          setToast(`🎉 Scrape Complete: Extracted ${job.count} leads!`);
+          setTimeout(() => setToast(null), 4000);
           fetchLeads(); // Refresh leads
         }
       } catch (err) { console.error(err); }
@@ -270,7 +276,19 @@ const Leads = () => {
   const totalPages = Math.ceil(total / 50);
 
   return (
-    <div className="leads-container">
+    <div className="leads-container fade-in">
+      {/* Dynamic Toast Notification */}
+      {toast && (
+        <div style={{
+          position: 'fixed', top: '20px', right: '20px', background: 'var(--primary)', 
+          color: 'white', padding: '16px 24px', borderRadius: '12px', zIndex: 9999,
+          boxShadow: '0 10px 30px rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', gap: '10px',
+          animation: 'slideIn 0.3s ease-out forwards', fontWeight: '500'
+        }}>
+          <CheckCircle2 size={20} /> {toast}
+        </div>
+      )}
+
       {/* Header */}
       <div className="leads-header">
         <div>
@@ -452,10 +470,9 @@ const Leads = () => {
                 <th className="sortable" onClick={() => handleSort('reviews')}>
                   Reviews {sortBy === 'reviews' ? (sortDir === 'asc' ? '↑' : '↓') : ''}
                 </th>
-                <th>Phone</th>
-                <th>Website</th>
-                <th>Address</th>
-                <th>Status</th>
+                <th>Phone & Email</th>
+                <th>Website & Signals</th>
+                <th>Lead Score</th>
                 <th style={{ minWidth: '200px', width: '200px' }}>Actions</th>
               </tr>
             </thead>
@@ -495,26 +512,47 @@ const Leads = () => {
                         })()}
                       </div>
                     ) : <span className="text-muted">—</span>}
+                    
+                    {/* Deep Scrape Email Injection */}
+                    {lead.website_enrichment && lead.website_enrichment[0] && lead.website_enrichment[0].extracted_email && (
+                       <div style={{ marginTop: '4px' }}>
+                         <a href={`mailto:${lead.website_enrichment[0].extracted_email}`} className="phone-link" style={{ color: '#0ea5e9' }}>
+                           <Mail size={14} /> {lead.website_enrichment[0].extracted_email}
+                         </a>
+                       </div>
+                    )}
                   </td>
                   <td>
                     {lead.website && lead.website !== 'N/A' ? (
-                      <a href={lead.website} target="_blank" rel="noreferrer" className="website-link">
-                        <Globe size={14} /> Visit
-                      </a>
+                      <div>
+                        <a href={lead.website} target="_blank" rel="noopener noreferrer" className="website-link">
+                          <ExternalLink size={14} /> Visit Site
+                        </a>
+                        <div style={{ display: 'flex', gap: '4px', marginTop: '6px' }}>
+                          {lead.website_enrichment && lead.website_enrichment[0] && (
+                            <>
+                              {lead.website_enrichment[0].seo_missing_h1 && <span title="Missing H1 Tag" style={{cursor: 'help', fontSize: '12px'}}>⚠️ SEO</span>}
+                              {lead.website_enrichment[0].has_fb_pixel && <span title="Has Facebook Pixel" style={{cursor: 'help', fontSize: '12px'}}>📈 Ads</span>}
+                              {lead.website_enrichment[0].cms_stack !== 'Custom' && <span style={{fontSize: '10px', background: '#334155', padding: '2px 6px', borderRadius: '4px', color: '#fff'}}>{lead.website_enrichment[0].cms_stack}</span>}
+                            </>
+                          )}
+                        </div>
+                      </div>
                     ) : (
-                      <span className="no-website-badge">No Website</span>
+                      <span className="text-muted text-sm" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <AlertTriangle size={14} color="#f59e0b" /> No Website
+                      </span>
                     )}
-                  </td>
-                  <td className="address-cell">
-                    <MapPin size={14} color="var(--text-muted)" />
-                    <span>{lead.address !== 'N/A' ? lead.address : '—'}</span>
                   </td>
                   <td>
-                    {lead.is_hot_lead ? (
-                      <span className="hot-badge"><Flame size={14} /> Hot</span>
-                    ) : (
-                      <span className="cold-badge">Normal</span>
-                    )}
+                    <div style={{ 
+                      display: 'inline-flex', padding: '4px 10px', borderRadius: '12px', fontWeight: 'bold', fontSize: '13px',
+                      background: lead.lead_score >= 60 ? 'rgba(239, 68, 68, 0.2)' : lead.lead_score >= 30 ? 'rgba(245, 158, 11, 0.2)' : 'rgba(56, 189, 248, 0.1)',
+                      color: lead.lead_score >= 60 ? '#ef4444' : lead.lead_score >= 30 ? '#f59e0b' : '#38bdf8' 
+                    }}>
+                      {lead.lead_score >= 60 ? <Flame size={14} style={{ marginRight: '4px' }} /> : null}
+                      Score: {lead.lead_score || 0}
+                    </div>
                   </td>
                   <td>
                     <div style={{ display: 'flex', gap: '8px', alignItems: 'center', minWidth: 'max-content', paddingRight: '8px' }}>
