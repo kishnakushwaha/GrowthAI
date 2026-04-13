@@ -77,8 +77,11 @@ async def scrape_google_maps(query, item_limit=20):
             if not place_links and scroll_attempts > 2:
                 print("⚠️ No links found, maybe Google is blocking? Taking screenshot.")
                 await page.screenshot(path="no_links_debug.png")
+            # Extract city from query (e.g. "Dentists in Agra" -> "Agra")
+            city_match = re.search(r'\bin\s+([A-Za-z\s]+)$', query, re.IGNORECASE)
+            search_city = city_match.group(1).strip() if city_match else ""
 
-            for link in place_links:
+            for rank_index, link in enumerate(place_links, start=1):
                 if extracted_count >= item_limit:
                     break
                     
@@ -152,39 +155,58 @@ async def scrape_google_maps(query, item_limit=20):
                     except:
                         pass
                     
-                    # ---- PHONE (data-item-id is stable) ----
+                    # ---- PHONE, WEBSITE, ADDRESS (Robust Aria-Label Scan) ----
                     phone = "N/A"
-                    try:
-                        phone_btn = detail.locator('button[data-item-id^="phone:tel:"]')
-                        if await phone_btn.count() > 0:
-                            phone_aria = await phone_btn.first.get_attribute('aria-label')
-                            if phone_aria:
-                                phone = phone_aria.replace("Phone: ", "").strip()
-                    except:
-                        pass
-                        
-                    # ---- WEBSITE (data-item-id is stable) ----
                     website = "N/A"
-                    try:
-                        web_el = detail.locator('a[data-item-id="authority"]')
-                        if await web_el.count() > 0:
-                            website = await web_el.first.get_attribute('href')
-                    except:
-                        pass
-                        
-                    # ---- ADDRESS (data-item-id is stable) ----
                     address = "N/A"
                     try:
-                        addr_btn = detail.locator('button[data-item-id="address"]')
-                        if await addr_btn.count() > 0:
-                            addr_aria = await addr_btn.first.get_attribute('aria-label')
-                            if addr_aria:
-                                address = addr_aria.replace("Address: ", "").strip()
-                    except:
-                        pass
+                        # Grab all interactive elements that might hold data
+                        interactive_els = detail.locator('button[aria-label], a[aria-label], a[href]')
+                        count = await interactive_els.count()
+                        
+                        for i in range(min(count, 50)): # Limit to 50 to avoid hanging
+                            el = interactive_els.nth(i)
+                            aria = await el.get_attribute('aria-label') or ""
+                            href = await el.get_attribute('href') or ""
+                            
+                            aria_lower = aria.lower()
+                            
+                            # Phone Detection
+                            if aria_lower.startswith("phone:") or aria_lower.startswith("call "):
+                                val = aria.split(":", 1)[-1].strip() if ":" in aria else aria.replace("Call ", "").strip()
+                                if val and phone == "N/A": 
+                                    phone = val
+                            elif href.startswith("tel:") and phone == "N/A":
+                                phone = href.replace("tel:", "").strip()
+                                
+                            # Website Detection
+                            if aria_lower.startswith("website:") or "website" in aria_lower:
+                                if href and href.startswith("http") and "google.com" not in href:
+                                    if website == "N/A": website = href
+                            elif await el.get_attribute('data-item-id') == "authority" and website == "N/A":
+                                if href: website = href
+                                
+                            # Address Detection
+                            if aria_lower.startswith("address:"):
+                                if address == "N/A": 
+                                    address = aria.replace("Address:", "").strip()
+                            elif aria_lower.startswith("location:"):
+                                if address == "N/A":
+                                    address = aria.replace("Location:", "").strip()
+                                    
+                    except Exception as loc_err:
+                        print(f"⚠️ Locator parsing error: {loc_err}")
 
                     # ---- MAPS URL ----
                     maps_url = page.url
+
+                    if (phone == "N/A" or not phone) and (website == "N/A" or not website):
+                        print(f"⏭️ Skipped Dead Lead: {name} (No Phone, No Website)")
+                        continue
+
+                    if not address or rating == "N/A":
+                        print(f"⏭️ Skipped Incomplete Lead: {name} (No Address or Rating)")
+                        continue
 
                     lead_data = {
                         "place_name": name,
@@ -194,7 +216,10 @@ async def scrape_google_maps(query, item_limit=20):
                         "phone": phone,
                         "website": website,
                         "address": address,
-                        "maps_url": maps_url
+                        "maps_url": maps_url,
+                        "rank_position": rank_index,
+                        "search_query": query,
+                        "search_city": search_city
                     }
                     
                     lead_id = save_lead(lead_data)
@@ -221,6 +246,8 @@ async def scrape_google_maps(query, item_limit=20):
             except:
                 break
 
+        from compute_gaps import compute_competitor_gaps
+        compute_competitor_gaps(query, search_city)
         print(f"\n🎉 Finished scraping! Extracted {extracted_count} leads.")
         await browser.close()
         

@@ -260,6 +260,11 @@ const CrmPipeline = () => {
           <span className="crm-stat-num">{stats.overdue_followups || 0}</span>
           <span className="crm-stat-label">Overdue</span>
         </div>
+        <div className="crm-stat" style={{ borderLeft: '1px solid rgba(255,255,255,0.1)', paddingLeft: '1.5rem' }}>
+          <Activity size={18} color="var(--primary)" />
+          <span className="crm-stat-num">{analytics?.automationStats?.active_drips || 0}</span>
+          <span className="crm-stat-label">Active Drips</span>
+        </div>
       </div>
 
       {/* View Toggle + Search */}
@@ -478,6 +483,29 @@ const CrmPipeline = () => {
                   ))}
                 </div>
               )}
+            </div>
+
+            {/* Automation Health (Phase 10) */}
+            <div className="glass-panel analytics-card" style={{ border: '1px solid var(--primary-light)' }}>
+              <h4 style={{ color: 'var(--primary)' }}>⚡ Automation Intelligence</h4>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px', marginTop: '10px' }}>
+                <div style={{ background: 'rgba(99,102,241,0.05)', padding: '15px', borderRadius: '12px' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Active Drips</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{analytics.automationStats?.active_drips || 0}</div>
+                </div>
+                <div style={{ background: 'rgba(34,197,94,0.05)', padding: '15px', borderRadius: '12px' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Reply Rate</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 'bold', color: '#22c55e' }}>{analytics.automationStats?.reply_rate || 0}%</div>
+                </div>
+                <div style={{ background: 'rgba(245,158,11,0.05)', padding: '15px', borderRadius: '12px' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Replied</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{analytics.automationStats?.replied_drips || 0}</div>
+                </div>
+                <div style={{ background: 'rgba(255,255,255,0.05)', padding: '15px', borderRadius: '12px' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Finished</div>
+                  <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{analytics.automationStats?.completed_drips || 0}</div>
+                </div>
+              </div>
             </div>
           </div>
 

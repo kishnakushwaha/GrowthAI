@@ -326,13 +326,26 @@
 }
 
 .address-cell {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  white-space: normal !important;
-  max-width: 250px;
+  display: table-cell;
+  max-width: 150px;
   font-size: 0.8rem !important;
   color: var(--text-muted);
+  vertical-align: middle;
+}
+
+.address-container {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.address-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .hot-badge {

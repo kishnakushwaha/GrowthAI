@@ -472,6 +472,7 @@ const Leads = () => {
                 </th>
                 <th>Phone & Email</th>
                 <th>Website & Signals</th>
+                <th>Address</th>
                 <th>Lead Score</th>
                 <th style={{ minWidth: '200px', width: '200px' }}>Actions</th>
               </tr>
@@ -543,6 +544,12 @@ const Leads = () => {
                         <AlertTriangle size={14} color="#f59e0b" /> No Website
                       </span>
                     )}
+                  </td>
+                  <td className="address-cell">
+                    <div className="address-container" title={lead.address !== 'N/A' ? lead.address : ''}>
+                      <MapPin size={14} className="text-muted" style={{ flexShrink: 0 }} />
+                      <span className="address-text">{lead.address !== 'N/A' ? lead.address : '—'}</span>
+                    </div>
                   </td>
                   <td>
                     <div style={{ 

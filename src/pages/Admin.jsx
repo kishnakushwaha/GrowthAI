@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Shield, Settings, Save, LogOut, Globe, DollarSign, 
-  Flame, ChevronRight, Target, Menu, X, FileSearch, Mail, LayoutDashboard, MessageCircle
+  Flame, ChevronRight, Target, Menu, X, FileSearch, Mail, LayoutDashboard, MessageCircle, Layers, Activity
 } from 'lucide-react';
 import Leads from './Leads';
 import AuditLeads from './AuditLeads';
 import EmailOutreach from './EmailOutreach';
 import WhatsAppOutreach from './WhatsAppOutreach';
 import CrmPipeline from './CrmPipeline';
+import SeoSignals from './SeoSignals';
+import WebsiteIntelligence from './WebsiteIntelligence';
+import Sequences from './Sequences';
+import OutreachMonitor from './OutreachMonitor';
 import './Admin.css';
 import API, { WA_API } from '../config';
 
@@ -17,9 +21,9 @@ const Admin = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSectionState] = useState(() => {
-    // Restore section from URL hash on load (e.g. /admin#crm?lead=123)
+    // Restore section from URL hash on load
     const hashData = window.location.hash.replace('#', '').split('?')[0];
-    const validSections = ['general', 'pricing', 'leads', 'audits', 'emails', 'whatsapp', 'crm'];
+    const validSections = ['general', 'pricing', 'leads', 'signals', 'intelligence', 'sequences', 'monitor', 'audits', 'emails', 'whatsapp', 'crm'];
     return validSections.includes(hashData) ? hashData : 'general';
   });
 
@@ -36,7 +40,7 @@ const Admin = () => {
   useEffect(() => {
     const handleHashChange = () => {
       const hashData = window.location.hash.replace('#', '').split('?')[0];
-      const validSections = ['general', 'pricing', 'leads', 'audits', 'emails', 'whatsapp', 'crm'];
+      const validSections = ['general', 'pricing', 'leads', 'signals', 'intelligence', 'sequences', 'monitor', 'audits', 'emails', 'whatsapp', 'crm'];
       if (validSections.includes(hashData)) {
         setActiveSectionState(hashData);
       }
@@ -80,19 +84,22 @@ const Admin = () => {
     setError('');
     setLoading(true);
     try {
-      // Verify password using a safe read-only protected endpoint
-      const res = await fetch(`${API}/api/leads`, {
-        headers: { 'Authorization': `Bearer ${password}` }
+      const res = await fetch(`${API}/api/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ password })
       });
       
-      if (res.status === 401) {
-        setError('Invalid Admin Password');
+      const data = await res.json();
+      
+      if (!res.ok || !data.success) {
+        setError(data.error || 'Invalid Admin Password');
         setLoading(false);
         return;
       }
       
-      // Password accepted — store and proceed
-      sessionStorage.setItem('adminToken', password);
+      // Password accepted — store JWT token
+      sessionStorage.setItem('adminToken', data.token);
       setIsAuthenticated(true);
       fetchContent();
     } catch (err) {
@@ -145,7 +152,11 @@ const Admin = () => {
   const navItems = [
     { id: 'general', label: 'General Info', icon: <Settings size={20} /> },
     { id: 'pricing', label: 'Pricing Packages', icon: <DollarSign size={20} /> },
-    { id: 'leads', label: 'Lead Pipeline', icon: <Flame size={20} /> },
+    { id: 'leads', label: 'Lead Database', icon: <Flame size={20} /> },
+    { id: 'signals', label: 'SEO & Tech Signals', icon: <Globe size={20} /> },
+    { id: 'intelligence', label: 'Website Intelligence', icon: <Target size={20} /> },
+    { id: 'sequences', label: 'Automation Builder', icon: <Layers size={20} /> },
+    { id: 'monitor', label: 'Outreach Monitor', icon: <Activity size={20} /> },
     { id: 'audits', label: 'Audit Leads', icon: <FileSearch size={20} /> },
     { id: 'emails', label: 'Email Outreach', icon: <Mail size={20} /> },
     { id: 'whatsapp', label: 'WhatsApp Outreach', icon: <MessageCircle size={20} /> },
@@ -306,6 +317,26 @@ const Admin = () => {
 
         {/* Leads Pipeline Section */}
         {activeSection === 'leads' && <Leads />}
+
+        {/* Brand New SEO & Tech Signals Phase 5 Map */}
+        {activeSection === 'signals' && (
+          <SeoSignals />
+        )}
+
+        {/* Phase 6 Intelligence Map */}
+        {activeSection === 'intelligence' && (
+          <WebsiteIntelligence />
+        )}
+
+        {/* Phase 8 Sequences Builder */}
+        {activeSection === 'sequences' && (
+          <Sequences />
+        )}
+
+        {/* Phase 9 Outreach Monitor */}
+        {activeSection === 'monitor' && (
+          <OutreachMonitor />
+        )}
 
         {/* Audit Leads Section */}
         {activeSection === 'audits' && <AuditLeads />}

@@ -5,6 +5,8 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
+import jwt from 'jsonwebtoken';
+import rateLimit from 'express-rate-limit';
 import { runAudit } from './auditEngine.js';
 import supabase from './supabaseClient.js';
 import { configureSmtp, getTransporter, getSmtpEmail, sendEmail, renderTemplate, trackOpen, trackClick, loadSmtpConfig } from './emailEngine.js';
@@ -36,19 +38,36 @@ if (!ADMIN_PASSWORD) {
 // Track active scrape jobs
 const activeJobs = {};
 
-// ===================== AUTH MIDDLEWARE =====================
+// ===================== AUTH & SECURITY =====================
+const JWT_SECRET = process.env.ADMIN_PASSWORD || 'growthai-secret-key-123';
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // Limit each IP to 10 login requests per window
+  message: { error: 'Too many login attempts, please try again after 15 minutes' }
+});
+
 const requireAuth = (req, res, next) => {
   const authHeader = req.headers.authorization;
-  if (!authHeader || authHeader !== `Bearer ${ADMIN_PASSWORD}`) {
-    return res.status(401).json({ error: 'Unauthorized access' });
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Unauthorized access: Missing Token' });
   }
-  next();
+
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    if (decoded.role !== 'admin') throw new Error('Invalid role');
+    next();
+  } catch (err) {
+    return res.status(401).json({ error: 'Unauthorized access: Invalid or Expired Token' });
+  }
 };
 
-app.post('/api/auth/verify', (req, res) => {
+app.post('/api/login', authLimiter, (req, res) => {
   const { password } = req.body;
   if (password === ADMIN_PASSWORD) {
-    res.json({ success: true });
+    const token = jwt.sign({ role: 'admin' }, JWT_SECRET, { expiresIn: '24h' });
+    res.json({ success: true, token });
   } else {
     res.status(401).json({ error: 'Invalid password' });
   }
@@ -130,6 +149,21 @@ app.get('/api/leads', requireAuth, async (req, res) => {
   }
 });
 
+// GET /api/signals - Dedicated SEO and Tech Analytics Dashboard Data
+app.get('/api/signals', requireAuth, async (req, res) => {
+  try {
+    const { data: signals, error } = await supabase
+      .from('website_enrichment')
+      .select('*, businesses(place_name, website, industry)')
+      .order('scraped_at', { ascending: false });
+
+    if (error) throw error;
+    res.json({ signals: signals || [] });
+  } catch (error) {
+    console.error('Signals fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch SEO signals' });
+  }
+});
 // GET /api/leads/export — Export CSV
 app.get('/api/leads/export', requireAuth, async (req, res) => {
   try {
@@ -161,6 +195,103 @@ app.get('/api/leads/export', requireAuth, async (req, res) => {
     res.send(csv);
   } catch (error) {
     res.status(500).json({ error: 'Failed to export' });
+  }
+});
+
+// ===================== TEMPLATES (Phase 6.7) =====================
+app.get('/api/templates', requireAuth, async (req, res) => {
+  try {
+    const { data: templates, error } = await supabase.from('templates').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json({ templates: templates || [] });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch templates' });
+  }
+});
+
+app.post('/api/templates', requireAuth, async (req, res) => {
+  try {
+    const { name, channel, opportunity_type, body } = req.body;
+    const { data, error } = await supabase.from('templates').insert([{ name, channel, opportunity_type, body }]).select().single();
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to create template' });
+  }
+});
+
+app.put('/api/templates/:id', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, channel, opportunity_type, body } = req.body;
+    const { data, error } = await supabase.from('templates').update({ name, channel, opportunity_type, body, updated_at: new Date().toISOString() }).eq('id', id).select().single();
+    if (error) throw error;
+    res.json(data);
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update template' });
+  }
+});
+
+app.delete('/api/templates/:id', requireAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { error } = await supabase.from('templates').delete().eq('id', id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete template' });
+  }
+});
+
+// ===================== WA MAGIC REWRITE (Phase 8.3) =====================
+app.post('/api/wa/ai-rewrite', requireAuth, async (req, res) => {
+  try {
+    const { base_template, lead_id, contact_name, business_name, city } = req.body;
+    
+    // Fetch deeper loop holes
+    let context_string = "No specific data found.";
+    if (lead_id) {
+       const { data: lead_data } = await supabase.from('website_enrichment').select('*').eq('business_id', lead_id).single();
+       if (lead_data) {
+          const defects = [];
+          if (lead_data.seo_score >= 5) defects.push(`Heavy SEO penalty of ${lead_data.seo_score}/10.`);
+          if (lead_data.pagespeed_mobile && lead_data.pagespeed_mobile < 60) defects.push(`Slow mobile speed (${lead_data.pagespeed_mobile}/100).`);
+          if (!lead_data.has_fb_pixel) defects.push(`Missing Meta/FB Pixel.`);
+          if (!lead_data.has_google_ads) defects.push(`Missing Google Ads tracking.`);
+          if (lead_data.ai_human_summary) defects.push(`Their website details: ${lead_data.ai_human_summary}`);
+          
+          context_string = defects.join(' ');
+       }
+    }
+
+    const prompt = `You are a casual, highly-effective sales closer sending a 1-to-1 WhatsApp message. 
+Take the following Template Draft and rewrite it so it sounds like a real human quickly typed it out on their phone to ${contact_name || 'the owner'} at ${business_name}. 
+Do not use corporate jargon. Avoid "Dear Sir/Madam". Be brief, punchy, and conversational.
+Critical Context about their business you MUST weave into the message naturally (do not list them, just mention one or two as the reason you are reaching out):
+${context_string}
+    
+Template Draft:
+${base_template}
+
+Output only the raw rewritten WhatsApp message.`;
+
+    const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+    });
+    
+    const geminiData = await geminiRes.json();
+    if (!geminiData.candidates || geminiData.candidates.length === 0) {
+        return res.status(500).json({ error: "NLP extraction failed." });
+    }
+    
+    const rewritten = geminiData.candidates[0].content.parts[0].text;
+    res.json({ success: true, rewritten_body: rewritten.trim() });
+    
+  } catch(e) {
+    console.error('AI Rewrite Error:', e);
+    res.status(500).json({ error: 'Failed to rewrite text' });
   }
 });
 
@@ -276,17 +407,59 @@ app.get('/api/scrape/:jobId', requireAuth, async (req, res) => {
 
 app.get('/api/extension/pending-tasks', async (req, res) => {
   try {
-    const { data, error } = await supabase
+    // 1. Check Legacy Outreach Log (Single sends)
+    const { data: legacy, error: err1 } = await supabase
       .from('outreach_log')
-      .select('id, channel, template_used, businesses!inner(phone)')
+      .select('id, channel, template_used, businesses!inner(phone, place_name)')
       .eq('status', 'enqueued')
       .limit(5);
     
-    if (error) throw error;
-    res.json(data || []);
+    // 2. Check New Phase 8 Sequence Queue
+    const { data: sequences, error: err2 } = await supabase
+      .from('pending_outreach')
+      .select('id, lead_id, channel, message_body, businesses!inner(phone, place_name)')
+      .eq('status', 'pending')
+      .limit(5);
+
+    if (err1 || err2) throw err1 || err2;
+
+    // Combine and format for Extension
+    const combined = [
+      ...(legacy || []).map(l => ({
+         id: l.id,
+         phone: l.businesses.phone,
+         message: l.template_used,
+         biz_name: l.businesses.place_name,
+         type: 'legacy'
+      })),
+      ...(sequences || []).map(s => ({
+         id: s.id,
+         phone: s.businesses.phone,
+         message: s.message_body,
+         biz_name: s.businesses.place_name,
+         type: 'sequence'
+      }))
+    ];
+
+    res.json(combined);
   } catch (err) {
     console.error('Queue fetch error:', err);
     res.status(500).json({ error: 'Failed to fetch tasks' });
+  }
+});
+
+// Update status from extension for both types
+app.post('/api/extension/update-status', async (req, res) => {
+  const { id, type, status } = req.body;
+  try {
+    if (type === 'sequence') {
+       await supabase.from('pending_outreach').update({ status }).eq('id', id);
+    } else {
+       await supabase.from('outreach_log').update({ status }).eq('id', id);
+    }
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update task status' });
   }
 });
 
@@ -295,20 +468,45 @@ app.post('/api/extension/log-reply', async (req, res) => {
   if (!phone) return res.status(400).json({ error: 'Phone required' });
   
   try {
-    // Exact match deduplication means we can look up by phone natively
-    const { data: leadData } = await supabase.from('businesses').select('id').eq('phone', phone).limit(1).single();
+    // 1. Find the lead by phone
+    const { data: leadData } = await supabase.from('businesses').select('id, place_name').eq('phone', phone).limit(1).single();
     if (!leadData) return res.status(404).json({ error: 'Lead not found' });
 
-    const { error } = await supabase.from('outreach_log')
+    console.log(`[REPLY-IQ] Detected reply from ${leadData.place_name} (${phone}). Updating CRM...`);
+
+    // 2. Mark as replied in outreach logs
+    await supabase.from('outreach_log')
       .update({ status: 'replied', reply_detected_at: new Date().toISOString() })
       .eq('lead_id', leadData.id)
-      .neq('status', 'replied'); // only update if not already replied
-      
-    if (error) throw error;
-    res.json({ success: true });
+      .neq('status', 'replied');
+
+    // 3. AUTO-PAUSE active automated sequences
+    const { error: seqError } = await supabase.from('campaign_leads')
+      .update({ status: 'replied' })
+      .eq('lead_id', leadData.id)
+      .eq('status', 'active');
+    
+    if (seqError) console.error('[REPLY-IQ] Failed to pause sequences:', seqError.message);
+
+    // 4. MOVE in Sales Pipeline (CRM)
+    const { error: crmError } = await supabase.from('pipeline_leads')
+      .update({ stage: 'contacted', updated_at: new Date().toISOString() })
+      .eq('phone', phone);
+    
+    if (crmError) console.error('[REPLY-IQ] CRM stage update failed:', crmError.message);
+
+    // 5. Add Activity Log
+    await supabase.from('activities').insert({
+      lead_id: leadData.id,
+      type: 'replied',
+      title: 'WhatsApp Reply Detected',
+      description: `Lead replied on WhatsApp. Automated sequences paused and moved to "Contacted" stage.`
+    });
+
+    res.json({ success: true, message: 'CRM updated and sequences paused.' });
   } catch (err) {
     console.error('Log reply error:', err);
-    res.status(500).json({ error: 'Failed to log reply' });
+    res.status(500).json({ error: 'Failed to log reply Intelligence' });
   }
 });
 
@@ -745,7 +943,143 @@ app.get('/api/email/logs', requireAuth, async (req, res) => {
   }
 });
 
-// ===================== CRM / PIPELINE API =====================
+// ===================== SEQUENCE ENGINE API (Phase 8) =====================
+
+// GET /api/sequences/campaigns - List all sequences
+app.get('/api/sequences/campaigns', requireAuth, async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('campaigns').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch campaigns' });
+  }
+});
+
+// POST /api/sequences/campaigns - Create a new sequence
+app.post('/api/sequences/campaigns', requireAuth, async (req, res) => {
+  try {
+    const { name, industry, description } = req.body;
+    const { data, error } = await supabase.from('campaigns').insert([{ name, industry, description, status: 'active' }]).select().single();
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create campaign: ' + (err.message || err.error_description) });
+  }
+});
+
+// GET /api/sequences/campaigns/:id/steps - Get steps for a campaign
+app.get('/api/sequences/campaigns/:id/steps', requireAuth, async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('sequence_steps').select('*').eq('campaign_id', req.params.id).order('day_offset', { ascending: true });
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch steps' });
+  }
+});
+
+// POST /api/sequences/campaigns/:id/steps - Add/Update a step
+app.post('/api/sequences/campaigns/:id/steps', requireAuth, async (req, res) => {
+  try {
+    const { day_offset, channel, template_body } = req.body;
+    const { data, error } = await supabase.from('sequence_steps').insert([{ 
+      campaign_id: req.params.id, 
+      day_offset, 
+      channel, 
+      template_body 
+    }]).select().single();
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to add step: ' + (err.message || err.error_description) });
+  }
+});
+
+// POST /api/sequences/enroll - Enroll lead in campaign
+app.post('/api/sequences/enroll', requireAuth, async (req, res) => {
+  try {
+    const { campaign_id, lead_id } = req.body;
+    
+    // Check if already enrolled
+    const { data: existing } = await supabase.from('campaign_leads').select('id').eq('campaign_id', campaign_id).eq('lead_id', lead_id).single();
+    if (existing) return res.status(400).json({ error: 'Lead already enrolled in this campaign' });
+
+    const { data, error } = await supabase.from('campaign_leads').insert([{ 
+      campaign_id, 
+      lead_id, 
+      status: 'active', 
+      current_step: 0 
+    }]).select().single();
+    
+    if (error) throw error;
+
+    // Immediately trigger scheduler check
+    processSequences();
+
+    res.json({ success: true, enrollment: data });
+  } catch (err) {
+    console.error('Enrollment error:', err);
+    res.status(500).json({ error: 'Failed to enroll lead' });
+  }
+});
+
+// POST /api/sequences/run - Manual trigger for Scheduler
+app.post('/api/sequences/run', requireAuth, async (req, res) => {
+  try {
+      await processSequences();
+      res.json({ success: true, message: 'Sequence engine processed.' });
+  } catch (err) {
+      res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/sequences/queue - Get upcoming outreach
+app.get('/api/sequences/queue', requireAuth, async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('pending_outreach')
+      .select('*, businesses(place_name, phone), campaigns(name)')
+      .order('scheduled_for', { ascending: true })
+      .limit(50);
+    
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch queue' });
+  }
+});
+
+// GET /api/wa/pending - Pick up tasks for Chrome Extension
+app.get('/api/wa/pending', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('pending_outreach')
+      .select('*, businesses(place_name, phone)')
+      .eq('status', 'pending')
+      .eq('channel', 'whatsapp')
+      .limit(10);
+      
+    if (error) throw error;
+    res.json(data || []);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch pending outreach' });
+  }
+});
+
+// POST /api/wa/mark-sent - Resolve task from Extension
+app.post('/api/wa/mark-sent', async (req, res) => {
+  const { id } = req.body;
+  try {
+    const { error } = await supabase.from('pending_outreach').update({ status: 'sent' }).eq('id', id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to update task' });
+  }
+});
+
+// ===================== LOGS & HISTORY API =====================
 
 // GET /api/crm/stages
 app.get('/api/crm/stages', requireAuth, (req, res) => {
@@ -994,4 +1328,15 @@ app.listen(PORT, async () => {
   } catch (err) {
     console.warn('⚠️ Initialization skipped:', err.message);
   }
+});
+
+// JSON 404 Handler (Phase 9 Polish)
+app.use((req, res) => {
+  res.status(404).json({ error: `Route ${req.method} ${req.url} not found on this server.` });
+});
+
+// Global Error Handler
+app.use((err, req, res, next) => {
+  console.error('[SERVER-ERROR]', err);
+  res.status(500).json({ error: 'Internal Server Error', details: err.message });
 });

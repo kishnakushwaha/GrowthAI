@@ -2,6 +2,17 @@ import os
 from datetime import datetime
 from supabase import create_client
 
+# Auto-load environment variables from backend/.env if running manually
+env_path = os.path.join(os.path.dirname(__file__), '..', 'backend', '.env')
+if os.path.exists(env_path):
+    with open(env_path, 'r') as f:
+        for line in f:
+            line = line.strip()
+            if line and not line.startswith('#') and '=' in line:
+                k, v = line.split('=', 1)
+                if k.strip() not in os.environ:
+                    os.environ[k.strip()] = v.strip().strip('"').strip("'")
+
 SUPABASE_URL = os.environ.get('SUPABASE_URL')
 SUPABASE_KEY = os.environ.get('SUPABASE_KEY')
 
@@ -82,7 +93,10 @@ def save_lead(data):
             'maps_url': data.get('maps_url'),
             'is_hot_lead': hot_lead,
             'lead_score': lead_score,
-            'scraped_at': datetime.now().isoformat()
+            'scraped_at': datetime.now().isoformat(),
+            'rank_position': data.get('rank_position'),
+            'search_query': data.get('search_query'),
+            'search_city': data.get('search_city')
         }).execute()
         if res.data and len(res.data) > 0:
             return res.data[0]['id']

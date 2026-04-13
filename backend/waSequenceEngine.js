@@ -1,6 +1,8 @@
 import supabase from './supabaseClient.js';
 import fetch from 'node-fetch';
 import { v4 as uuidv4 } from 'uuid';
+import { rewriteWithAI } from './geminiHelper.js';
+import { sendEmail } from './emailEngine.js';
 
 // Helper to wrap URLs for tracking
 function wrapUrls(text, trackingId, baseUrl) {
@@ -12,153 +14,141 @@ function wrapUrls(text, trackingId, baseUrl) {
 
 const WA_SERVICE_URL = 'http://localhost:4000/api/wa/send';
 
-// The 3-Step Sequence Templates (High-Reply Versions)
-const SEQUENCE_STEPS = [
-  {
-    step: 1,
-    delayDays: 0,
-    body: `Hi [[contact_name]],
-
-I came across [[business_name]] while reviewing businesses in [[city]].
-
-I noticed a few missed opportunities where you could get more enquiries from Google search & Meta Ads.
-
-I prepared a short visibility report for your business.
-
-Can I share it here?`
-  },
-  {
-    step: 2,
-    delayDays: 2, // Day 3 (1+2)
-    body: `Hi [[contact_name]],
-
-Just checking again — while reviewing [[business_name]], I noticed competitors in [[city]] are already capturing leads from Google searches that your business could also receive.
-
-I included those keywords inside the report I prepared.
-
-Should I send it here?`
-  },
-  {
-    step: 3,
-    delayDays: 4, // Day 7 (3+4)
-    body: `Hi [[contact_name]],
-
-Last message from my side 🙂
-
-We recently helped similar businesses improve enquiry flow through Google visibility improvements and targeted ads.
-
-I had prepared a quick suggestion report for [[business_name]] as well.
-
-Let me know if you'd like me to share it.`
-  }
-];
-
+/**
+ * PHASE 8 REFACTOR:
+ * Dynamic Sequence Engine
+ * Checks all active campaign enrollments against their sequence schedules.
+ * Generates personalized messages and queues them for the Chrome Extension.
+ */
 export async function processSequences() {
-  console.log('[WA-SEQ] Running automation check...');
-  
-  // Calculate Base URL for tracking
-  const trackingBaseUrl = process.env.RENDER_EXTERNAL_URL || 'http://localhost:3001';
+  console.log('[WA-SEQ-DRIP] Scanning for due outreach tasks...');
   
   try {
-    // 1. Get all active enrollments that are due for next step
+    const now = new Date().toISOString();
+
+    // 1. Get all active enrollments that are due for processing
+    // next_run_at being null means it's Step 0 (initial send)
     const { data: enrollments, error } = await supabase
-      .from('wa_enrollments')
-      .select('*')
+      .from('campaign_leads')
+      .select(`
+        *,
+        businesses ( id, place_name, phone, city ),
+        campaigns ( id, name )
+      `)
       .eq('status', 'active')
-      .lte('next_run_at', new Date().toISOString());
+      .or(`next_run_at.lte.${now},next_run_at.is.null`);
 
     if (error) throw error;
     if (!enrollments || enrollments.length === 0) {
-      console.log('[WA-SEQ] No pending messages found.');
+      console.log('[WA-SEQ-DRIP] No leads due for follow-up.');
       return;
     }
 
-    console.log(`[WA-SEQ] Found ${enrollments.length} messages to process.`);
+    console.log(`[WA-SEQ-DRIP] Processing ${enrollments.length} due enrollments.`);
 
     for (const enrollment of enrollments) {
-      const stepConfig = SEQUENCE_STEPS.find(s => s.step === enrollment.current_step);
-      if (!stepConfig) {
-        // Mark as completed if no more steps
-        await supabase.from('wa_enrollments').update({ status: 'completed' }).eq('id', enrollment.id);
+      // 2. Find the current step for this lead in their campaign
+      const { data: steps } = await supabase
+        .from('sequence_steps')
+        .select('*')
+        .eq('campaign_id', enrollment.campaign_id)
+        .order('day_offset', { ascending: true });
+
+      if (!steps || steps.length === 0) continue;
+
+      const currentStepIndex = enrollment.current_step;
+      const currentStep = steps[currentStepIndex];
+
+      if (!currentStep) {
+        // No more steps left — campaign completed for this lead
+        await supabase.from('campaign_leads').update({ status: 'completed' }).eq('id', enrollment.id);
         continue;
       }
 
-      const trackingId = uuidv4();
+      // 3. Generate the message
+      const biz = enrollment.businesses;
+      let body = currentStep.template_body
+        .replace(/{{business_name}}/g, biz.place_name || 'your business')
+        .replace(/{{city}}/g, biz.city || 'your city')
+        .replace(/{{contact_name}}/g, biz.place_name?.split(' ')[0] || 'Team');
 
-      // Render placeholders [[ ]]
-      let renderedBody = stepConfig.body
-        .replace(/\[\[contact_name\]\]/g, enrollment.biz_name?.split(' ')[0] || 'Team')
-        .replace(/\[\[business_name\]\]/g, enrollment.biz_name || 'your business')
-        .replace(/\[\[city\]\]/g, enrollment.city || 'your city');
+      // PHASE 9: Human-Fluid Automation (AI Rewrite)
+      // Only rewrite if we have enough context about the business
+      const { data: fullBiz } = await supabase.from('business_intelligence').select('ai_human_summary').eq('business_id', biz.id).single();
+      
+      const aiRewritten = await rewriteWithAI(body, { 
+        place_name: biz.place_name, 
+        ai_human_summary: fullBiz?.ai_human_summary 
+      });
 
-      // Wrap all links for tracking engagement!
-      const trackedBody = wrapUrls(renderedBody, trackingId, trackingBaseUrl);
-
-      // Send via WhatsApp Service
-      try {
-        const response = await fetch(WA_SERVICE_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            phone: enrollment.phone,
-            message: trackedBody
-          })
-        });
-
-        const result = await response.json();
-        
-        if (result.success) {
-          console.log(`[WA-SEQ] ✅ Step ${enrollment.current_step} tracked sent to ${enrollment.phone}`);
-          
-          // Log to wa_logs for dashboard tracking
-          const logData = {
-            lead_id: enrollment.lead_id,
-            tracking_id: trackingId, 
-            phone: enrollment.phone,
-            biz_name: enrollment.biz_name,
-            message: trackedBody,
-            type: 'automation',
-            step: enrollment.current_step,
-            status: 'sent'
-          };
-
-          const { error: insertErr } = await supabase.from('wa_logs').insert(logData);
-          
-          if (insertErr) {
-             console.error('[WA-SEQ] Tracking Log Insert Failed, attempting fallback...', insertErr.message);
-             // FALLBACK: Try without tracking_id in case the column is missing
-             delete logData.tracking_id;
-             await supabase.from('wa_logs').insert(logData);
-          }
-
-          // Calculate next step
-          const nextStep = enrollment.current_step + 1;
-          const nextStepConfig = SEQUENCE_STEPS.find(s => s.step === nextStep);
-          
-          if (nextStepConfig) {
-            const nextRunDate = new Date();
-            nextRunDate.setDate(nextRunDate.getDate() + nextStepConfig.delayDays);
-            
-            await supabase.from('wa_enrollments').update({
-              current_step: nextStep,
-              next_run_at: nextRunDate.toISOString(),
-              last_sent_at: new Date().toISOString()
-            }).eq('id', enrollment.id);
-          } else {
-            // End of sequence
-            await supabase.from('wa_enrollments').update({
-              status: 'completed',
-              last_sent_at: new Date().toISOString()
-            }).eq('id', enrollment.id);
-          }
-        } else {
-          console.error(`[WA-SEQ] ❌ Failed to send to ${enrollment.phone}:`, result.error);
-        }
-      } catch (err) {
-        console.error(`[WA-SEQ] API Error for ${enrollment.phone}:`, err.message);
+      if (aiRewritten) {
+        console.log(`[WA-SEQ-DRIP] AI Personalization applied for ${biz.place_name}`);
+        body = aiRewritten;
       }
+
+      // 4. Handle Dispatches Based on Channel
+      if (currentStep.channel === 'email') {
+        try {
+          // Find if we have an email for this business
+          const { data: businessDetail } = await supabase.from('pipeline_leads').select('email').eq('business_name', biz.place_name).single();
+          
+          if (businessDetail?.email) {
+            await sendEmail({
+              to: businessDetail.email,
+              toName: biz.place_name?.split(' ')[0] || 'Team',
+              businessName: biz.place_name,
+              subject: `Update regarding ${biz.place_name}`,
+              body: body,
+              campaignId: enrollment.campaign_id
+            });
+            console.log(`[DRIP-ENGINE] 📧 Email sent to ${businessDetail.email}`);
+          } else {
+            console.warn(`[DRIP-ENGINE] ⚠️ Skip Email: No address found for ${biz.place_name}`);
+          }
+        } catch (mailErr) {
+          console.error(`[DRIP-ENGINE] 📧 Email failed for ${biz.place_name}:`, mailErr.message);
+        }
+      }
+
+      // 5. Always record in pending_outreach for history/trackability
+      const { error: queueErr } = await supabase.from('pending_outreach').insert({
+        lead_id: biz.id,
+        campaign_id: enrollment.campaign_id,
+        step_id: currentStep.id,
+        channel: currentStep.channel,
+        message_body: body,
+        status: currentStep.channel === 'email' ? 'sent' : 'pending',
+        scheduled_for: now
+      });
+
+      if (queueErr) {
+        console.error(`[DRIP-ENGINE] Failed to log/queue lead ${biz.id}:`, queueErr.message);
+        continue;
+      }
+
+      // 5. Calculate next run date
+      const nextStepIndex = currentStepIndex + 1;
+      const nextStep = steps[nextStepIndex];
+      let nextRunAt = null;
+
+      if (nextStep) {
+        // Offset is relative to "now" (when the previous step was sent)
+        const nextDate = new Date();
+        nextDate.setDate(nextDate.getDate() + (nextStep.day_offset || 1));
+        nextRunAt = nextDate.toISOString();
+      }
+
+      // 6. Update enrollment state
+      await supabase.from('campaign_leads').update({
+        current_step: nextStepIndex,
+        next_run_at: nextRunAt,
+        status: nextStep ? 'active' : 'completed'
+      }).eq('id', enrollment.id);
+
+      console.log(`[WA-SEQ-DRIP] ✅ Queued Step ${currentStepIndex + 1} for ${biz.place_name}. Next run: ${nextRunAt || 'Completed'}`);
     }
+
   } catch (err) {
-    console.error('[WA-SEQ] Fatal processing error:', err.message);
+    console.error('[WA-SEQ-DRIP] Critical failure:', err.message);
   }
 }

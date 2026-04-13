@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   MessageCircle, Send, Settings, FileText, Users, Eye, MousePointer, AlertCircle,
-  Loader2, ChevronDown, ChevronUp, Edit3, Plus, X, Check, Smartphone, Activity, WifiOff, CheckCircle2
+  Loader2, ChevronDown, ChevronUp, Edit3, Plus, X, Check, Smartphone, Activity, WifiOff, CheckCircle2, Zap
 } from 'lucide-react';
 import { WA_API } from '../config';
 import './WhatsAppOutreach.css';
@@ -103,6 +103,8 @@ const WhatsAppOutreach = () => {
   const [composePhone, setComposePhone] = useState('');
   const [composeToName, setComposeToName] = useState('');
   const [composeBusiness, setComposeBusiness] = useState('');
+  const [activeLeadId, setActiveLeadId] = useState(null);
+  const [isRewriting, setIsRewriting] = useState(false);
   const [composeBody, setComposeBody] = useState('');
   const [composeVars, setComposeVars] = useState({});
   const [rawTemplate, setRawTemplate] = useState({ body: '' });
@@ -112,39 +114,25 @@ const WhatsAppOutreach = () => {
   const [newTemplate, setNewTemplate] = useState(null);
 
   useEffect(() => {
-    const stored = localStorage.getItem(TEMPLATES_STORAGE_KEY);
-    if (stored) {
-      try {
-        let parsed = JSON.parse(stored);
-        // Migration: Conver to [[ ]] syntax
-        let migrated = false;
-        parsed = parsed.map(t => {
-          if (t.body && (t.body.includes('{{') || t.body.includes('Delhi'))) {
-            migrated = true;
-            return { 
-              ...t, 
-              body: t.body
-                .replace(/{{contact_name}}/g, '[[contact_name]]')
-                .replace(/{{business_name}}/g, '[[business_name]]')
-                .replace(/{{city}}/g, '[[city]]')
-                .replace('businesses in Delhi', 'businesses in [[city]]')
-            };
-          }
-          return t;
-        });
-        
-        setTemplates(parsed);
-        if (migrated) {
-          localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(parsed));
-        }
-      } catch (e) {
-        setTemplates(DEFAULT_TEMPLATES);
-      }
-    } else {
-      setTemplates(DEFAULT_TEMPLATES);
-      localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(DEFAULT_TEMPLATES));
-    }
+    fetchTemplatesFromAPI();
   }, []);
+
+  const fetchTemplatesFromAPI = async () => {
+    try {
+      const token = sessionStorage.getItem('adminToken');
+      const res = await fetch(`${API}/api/templates`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.templates && data.templates.length > 0) {
+        setTemplates(data.templates);
+      } else {
+        setTemplates(DEFAULT_TEMPLATES); // Fallback memory
+      }
+    } catch (e) {
+      setTemplates(DEFAULT_TEMPLATES);
+    }
+  };
 
   useEffect(() => {
     const handlePopulateFromURL = () => {
@@ -176,6 +164,13 @@ const WhatsAppOutreach = () => {
           setComposeVars(prev => ({ ...prev, city: city }));
         }
         
+        const leadId = queryParams.get('lead_id');
+        if (leadId) {
+          setActiveLeadId(leadId);
+        }
+        
+        const pitch = queryParams.get('pitch');
+
         // Initial render with all vars
         const initialVars = {
            contact_name: extractFormalName(business) || 'Team',
@@ -183,16 +178,23 @@ const WhatsAppOutreach = () => {
            city: city || 'your city'
         };
         
-        // Find the first template body to initialize correctly
-        const initialTpl = templates.length > 0 ? templates[0] : DEFAULT_TEMPLATES[0];
-        if (initialTpl && initialTpl.body) {
-           let bdy = initialTpl.body;
-           for (const [k, v] of Object.entries(initialVars)) {
-              bdy = bdy.replace(new RegExp(`\\[\\[${k}\\]\\]`, 'gi'), v);
+        if (pitch) {
+           const customBody = `Hey ${initialVars.contact_name},\n\n${pitch}\n\nWe typically fix this for clients in your industry. Are you open to a quick chat about recovering those leads?`;
+           setComposeBody(customBody);
+           setSelectedTemplate(''); // Custom payload
+           setRawTemplate(null);
+        } else {
+           // Find the first template body to initialize correctly
+           const initialTpl = templates.length > 0 ? templates[0] : DEFAULT_TEMPLATES[0];
+           if (initialTpl && initialTpl.body) {
+              let bdy = initialTpl.body;
+              for (const [k, v] of Object.entries(initialVars)) {
+                 bdy = bdy.replace(new RegExp(`\\[\\[${k}\\]\\]`, 'gi'), v);
+              }
+              setComposeBody(bdy);
+              setRawTemplate(initialTpl);
+              setSelectedTemplate(initialTpl.id);
            }
-           setComposeBody(bdy);
-           setRawTemplate(initialTpl);
-           setSelectedTemplate(initialTpl.id);
         }
         
         window.history.replaceState(null, '', window.location.pathname + '#whatsapp');
@@ -204,10 +206,7 @@ const WhatsAppOutreach = () => {
     return () => window.removeEventListener('hashchange', handlePopulateFromURL);
   }, [rawTemplate]);
 
-  const saveTemplates = (newTpls) => {
-    setTemplates(newTpls);
-    localStorage.setItem(TEMPLATES_STORAGE_KEY, JSON.stringify(newTpls));
-  };
+  // Removed redundant saveTemplates wrapper since API calls handle state
 
   const extractFormalName = (bizName) => {
     if (!bizName) return '';
@@ -292,6 +291,39 @@ const WhatsAppOutreach = () => {
     const newVars = { ...composeVars, [key]: value };
     setComposeVars(newVars);
     rerenderFromTemplate(newVars);
+  };
+
+  const handleMagicRewrite = async () => {
+    if (!composeBody || composeBody.trim() === '') {
+      alert("Please select a base template or write a rough draft first!");
+      return;
+    }
+    
+    setIsRewriting(true);
+    try {
+      const token = sessionStorage.getItem('adminToken');
+      const res = await fetch(`${API}/api/wa/ai-rewrite`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ 
+           base_template: composeBody,
+           lead_id: activeLeadId,
+           contact_name: composeToName,
+           business_name: composeBusiness,
+           city: composeVars.city || ''
+        })
+      });
+      const data = await res.json();
+      if (data.success && data.rewritten_body) {
+         setComposeBody(data.rewritten_body);
+      } else {
+         alert("Failed to rewrite: " + data.error);
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error contacting NLP engine.");
+    }
+    setIsRewriting(false);
   };
 
   // Open WhatsApp API Link
@@ -382,26 +414,69 @@ const WhatsAppOutreach = () => {
     }
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     if (!editingTemplate.name || !editingTemplate.body) return;
-    const updated = templates.map(t => t.id === editingTemplate.id ? editingTemplate : t);
-    saveTemplates(updated);
-    setEditingTemplate(null);
+    try {
+      const token = sessionStorage.getItem('adminToken');
+      
+      // If it's a legacy fallback template starting with tpl_, create it instead of update
+      if (editingTemplate.id.startsWith('tpl_')) {
+         await handleSaveNewFromLegacy(editingTemplate);
+         return;
+      }
+
+      await fetch(`${API}/api/templates/${editingTemplate.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(editingTemplate)
+      });
+      fetchTemplatesFromAPI();
+      setEditingTemplate(null);
+    } catch(e) { console.error('Failed to update template', e) }
   };
 
-  const handleDeleteTemplate = (id) => {
+  const handleSaveNewFromLegacy = async (tplData) => {
+      const token = sessionStorage.getItem('adminToken');
+      await fetch(`${API}/api/templates`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ name: tplData.name, opportunity_type: tplData.opportunity_type || '', channel: 'whatsapp', body: tplData.body })
+      });
+      fetchTemplatesFromAPI();
+      setEditingTemplate(null);
+  }
+
+  const handleDeleteTemplate = async (id) => {
     if (window.confirm("Delete this template?")) {
-      const updated = templates.filter(t => t.id !== id);
-      saveTemplates(updated);
-      if (selectedTemplate?.id === id) setSelectedTemplate(null);
+      try {
+         const token = sessionStorage.getItem('adminToken');
+         // If it's a legacy local template, just filter locally (rare edge case now)
+         if (id.startsWith('tpl_')) {
+            setTemplates(templates.filter(t => t.id !== id));
+            return;
+         }
+         await fetch(`${API}/api/templates/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+         });
+         fetchTemplatesFromAPI();
+         if (selectedTemplate?.id === id) setSelectedTemplate(null);
+      } catch(e) { console.error('Failed to delete template', e) }
     }
   };
 
-  const handleSaveNew = () => {
+  const handleSaveNew = async () => {
     if (!newTemplate.name || !newTemplate.body) return;
-    const tpl = { id: `tpl_wa_${Date.now()}`, ...newTemplate };
-    saveTemplates([...templates, tpl]);
-    setNewTemplate(null);
+    try {
+      const token = sessionStorage.getItem('adminToken');
+      await fetch(`${API}/api/templates`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ name: newTemplate.name, channel: 'whatsapp', opportunity_type: newTemplate.opportunity_type || '', body: newTemplate.body })
+      });
+      fetchTemplatesFromAPI();
+      setNewTemplate(null);
+    } catch(e) { console.error('Failed to create template', e) }
   };
 
   return (
@@ -550,6 +625,16 @@ const WhatsAppOutreach = () => {
             )}
 
             <div className="compose-fields" style={{ marginTop: '1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                 <label style={{ margin: 0 }}>Message Body</label>
+                 {activeLeadId && (
+                   <button onClick={handleMagicRewrite} disabled={isRewriting} style={{ 
+                     background: 'linear-gradient(45deg, #a855f7, #6366f1)', color: 'white', border: 'none', padding: '6px 12px', borderRadius: '6px', fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', opacity: isRewriting ? 0.7 : 1
+                   }}>
+                     {isRewriting ? <Loader2 size={14} className="spin" /> : <Zap size={14} />} Magic Rewrite with Lead Intel
+                   </button>
+                 )}
+              </div>
               <textarea className="admin-input compose-body" placeholder="Type your WhatsApp message here..." rows={10} value={composeBody} onChange={e => setComposeBody(e.target.value)} />
             </div>
 

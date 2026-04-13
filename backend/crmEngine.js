@@ -259,11 +259,22 @@ export async function getAnalytics() {
     business_name: a.pipeline_leads?.business_name || 'Unknown'
   }));
 
-  // Overdue follow-ups
-  const now = new Date().toISOString().split('T')[0];
-  const overdueLeads = leads.filter(l => 
-    l.next_followup && l.next_followup <= now && !['won', 'lost'].includes(l.stage)
-  );
+  // Automation Stats (Phase 10)
+  const { data: campaignLeads } = await supabase.from('campaign_leads').select('*');
+  const drips = campaignLeads || [];
+  const automationStats = {
+    active_drips: drips.filter(d => d.status === 'active').length,
+    replied_drips: drips.filter(d => d.status === 'replied').length,
+    completed_drips: drips.filter(d => d.status === 'completed').length,
+    reply_rate: drips.length > 0 ? ((drips.filter(d => d.status === 'replied').length / drips.length) * 100).toFixed(1) : 0
+  };
 
-  return { conversionByStage, bySource, byIndustry, recentActivities: activities, overdueLeads };
+  return { 
+    conversionByStage, 
+    bySource, 
+    byIndustry, 
+    recentActivities: activities, 
+    overdueLeads,
+    automationStats
+  };
 }
