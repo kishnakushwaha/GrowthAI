@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Target, TrendingUp, AlertTriangle, CheckCircle, Search, Mail, EyeOff, LayoutDashboard, Copy, Zap, MessageCircle, Code, Monitor, ExternalLink, Globe, PlusSquare, Play, X } from 'lucide-react';
+import { Target, TrendingUp, AlertTriangle, CheckCircle, Search, Mail, EyeOff, LayoutDashboard, Copy, Zap, MessageCircle, Code, Monitor, ExternalLink, Globe, PlusSquare, Play, X, Loader2 } from 'lucide-react';
 import API from '../config';
 import './Leads.css';
 
