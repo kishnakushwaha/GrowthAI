@@ -1429,6 +1429,12 @@ app.post('/api/intelligence/enrich/:id', requireAuth, async (req, res) => {
     res.json({ success: true, updated });
   } catch (err) {
     console.error('Enrichment failed:', err);
+    // X7: Save error to DB so UI can show it
+    try {
+      await supabase.from('website_enrichment').update({ 
+        ai_human_summary: `Error: ${err.message || 'AI Failed'}` 
+      }).eq('lead_id', req.params.leadId);
+    } catch (e) {}
     res.status(500).json({ error: 'AI Enrichment failed' });
   }
 });

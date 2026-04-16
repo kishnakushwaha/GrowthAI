@@ -56,7 +56,8 @@ const WebsiteIntelligence = () => {
       });
       const data = await res.json();
       if (data.success) {
-        setLeads(prev => prev.map(l => (l.businesses?.id === targetId || l.lead_id === targetId) ? data.updated : l));
+        // Refresh the whole list to ensure we have the latest from DB
+        await fetchIntelligence();
       } else {
         alert(data.error || 'Enrichment failed');
       }

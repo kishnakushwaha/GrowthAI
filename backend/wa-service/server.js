@@ -104,6 +104,27 @@ async function startWhatsApp() {
   });
 
   waClient.initialize();
+  
+  // A7: QR Timeout Monitor
+  // If we aren't connected and don't have a QR after 60s, something is stuck. Reboot.
+  setTimeout(() => {
+    if (!isReady && !currentQr) {
+      console.warn('[WA] ⚠️ Startup timeout: No QR generated in 60s. Force rebooting...');
+      handleReconnectInternal();
+    }
+  }, 60000);
+}
+
+async function handleReconnectInternal() {
+  isReady = false;
+  currentQr = null;
+  if (waClient) {
+    try {
+      await waClient.destroy();
+    } catch (e) {}
+  }
+  await clearLocalAuth();
+  setTimeout(() => startWhatsApp(), 2000);
 }
 
 // ----------------------
@@ -252,28 +273,8 @@ app.post('/api/wa/disconnect', requireAuth, async (req, res) => {
 app.post('/api/wa/reconnect', requireAuth, async (req, res) => {
   try {
     console.log('[WA] Reconnection requested — clearing old session...');
-    isReady = false;
-    currentQr = null;
-
-    if (waClient) {
-      try {
-        await waClient.destroy();
-      } catch (e) {
-        console.log('[WA] Client destroy error (safe to ignore):', e.message);
-      }
-    }
-
-    // Clear old auth data
-    await clearLocalAuth();
-
+    handleReconnectInternal();
     res.json({ success: true, message: 'Reconnecting... QR code will appear shortly.' });
-
-    // Reboot WhatsApp Engine after a brief delay
-    setTimeout(() => {
-      console.log('[WA] Booting fresh WhatsApp Engine for new QR...');
-      startWhatsApp();
-    }, 2000);
-
   } catch (error) {
     console.error('[WA] Reconnect error:', error);
     res.status(500).json({ success: false, error: error.message });
