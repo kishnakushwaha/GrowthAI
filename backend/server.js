@@ -1378,17 +1378,29 @@ app.post('/api/intelligence/enrich/:id', requireAuth, async (req, res) => {
     
     Return ONLY a JSON object with: "ai_human_summary" (string) and "ai_first_line" (string).`;
 
-    const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+    const geminiModel = 'gemini-2.0-flash';
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${process.env.GEMINI_API_KEY}`;
+    
+    log.info('Calling Gemini AI for enrichment', { leadId: id, model: geminiModel });
+    
+    const geminiRes = await fetch(geminiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
     });
 
     const geminiData = await geminiRes.json();
+    
+    // Log the raw API response for debugging
+    if (!geminiRes.ok) {
+      log.error('Gemini API returned error', { status: geminiRes.status, error: geminiData.error?.message || JSON.stringify(geminiData) });
+    }
+    
     const rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+    log.info('Gemini raw response', { rawText: rawText.substring(0, 200) });
     
     // Robust cleaning for common LLM markdown formatting
-    let aiData = { ai_human_summary: "N/A", ai_first_line: "Hi there!" };
+    let aiData = { ai_human_summary: "Analysis pending", ai_first_line: "Hi, I noticed your business could benefit from our services." };
     try {
       const cleanedJson = rawText.replace(/```[a-z]*\n/g, '').replace(/```/g, '').trim();
       aiData = { ...aiData, ...JSON.parse(cleanedJson) };
