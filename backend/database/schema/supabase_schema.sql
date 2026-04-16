@@ -32,7 +32,8 @@ CREATE TABLE scrape_jobs (
     started_at TIMESTAMP WITH TIME ZONE,
     completed_at TIMESTAMP WITH TIME ZONE,
     error_log TEXT,
-    leads_found INT DEFAULT 0
+    leads_found INT DEFAULT 0,
+    agency_id UUID
 );
 
 CREATE INDEX idx_scrape_jobs_status ON scrape_jobs(status);

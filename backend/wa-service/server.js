@@ -29,7 +29,11 @@ let waClient;
 let isReady = false;
 let currentQr = null;
 
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'Kishna@321';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+
+if (!ADMIN_PASSWORD) {
+  console.warn('⚠️ WARNING: ADMIN_PASSWORD environment variable is not set!');
+}
 
 // ----------------------
 // AUTH MIDDLEWARE

@@ -18,16 +18,8 @@ CREATE TABLE IF NOT EXISTS users (
     created_at timestamptz DEFAULT now()
 );
 
--- 2. Insert Default Agency to prevent data loss
-INSERT INTO agencies (id, name) 
-VALUES ('00000000-0000-0000-0000-000000000001', 'Default Agency')
-ON CONFLICT DO NOTHING;
-
--- 2.1 Insert master admin user for the Default Agency
--- using the raw password placeholder. The backend fallback logic will accept this raw password.
-INSERT INTO users (agency_id, name, email, password_hash, role)
-VALUES ('00000000-0000-0000-0000-000000000001', 'Master Admin', 'admin@growthai.com', 'admin_password_fallback', 'admin')
-ON CONFLICT DO NOTHING;
+-- 2. Setup Multi-Tenancy Structure
+-- Table definitions only. Seed data (agencies, users) must be created via the Admin signup flow.
 
 -- 3. Add `agency_id` column to all domain tables
 

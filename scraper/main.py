@@ -31,30 +31,62 @@ async def scrape_google_maps(query, item_limit=20, agency_id=None):
         
         search_url = f"https://www.google.com/maps/search/{urllib.parse.quote(query)}/?hl=en"
         print(f"🔗 Navigating to: {search_url}")
-        await page.goto(search_url, wait_until='domcontentloaded', timeout=60000)
+        
+        # F6: Handle Google Consent Screens (common in cloud environments)
+        try:
+            await page.goto(search_url, wait_until='networkidle', timeout=60000)
+            
+            # Check for "Before you continue" consent screen
+            consent_buttons = [
+                'button[aria-label="Accept all"]',
+                'button[aria-label="I agree"]',
+                'button:has-text("Accept all")',
+                'button:has-text("Agree")',
+                '#L2AGLb' # Common ID for Google "Agree" buttons
+            ]
+            
+            for selector in consent_buttons:
+                if await page.locator(selector).is_visible():
+                    print(f"🛡️ Consent screen detected. Clicking: {selector}")
+                    await page.click(selector)
+                    await page.wait_for_load_state('networkidle')
+                    break
+        except Exception as e:
+            print(f"⚠️ Navigation warning: {str(e)}")
+
+        print(f"📄 Page Title: '{await page.title()}'")
         
         print("⏳ Waiting for results to load (max 60s)...")
         try:
             feed_selectors = [
                 'div[role="feed"]',
                 'div[aria-label^="Results for"]',
-                'div[role="main"]'
+                'div[role="main"]',
+                'div.m678Wd', # Common Maps results class
+                'div.p0377e'
             ]
             
             found = False
             for selector in feed_selectors:
                 try:
-                    await page.wait_for_selector(selector, timeout=15000)
+                    await page.wait_for_selector(selector, timeout=12000)
                     print(f"✅ Found results feed using: {selector}")
                     found = True
                     break
                 except:
                     continue
+            
             if not found:
                 print("⚠️ Still waiting, taking a screenshot to debug...")
                 await page.screenshot(path="scraper_debug.png")
-                await page.wait_for_selector('div[role="feed"]', timeout=45000)
-                print("✅ Found results feed after extra wait.")
+                # Final fallback: any link that looks like a place
+                try:
+                    await page.wait_for_selector('a[href*="/maps/place/"]', timeout=30000)
+                    print("✅ Found place links without direct feed parent — proceeding.")
+                except:
+                    print(f"❌ No recognizable feed found. Current title: '{await page.title()}'")
+                    await browser.close()
+                    return
         except Exception as e:
             print(f"❌ Could not find results feed: {str(e)}")
             await page.screenshot(path="no_feed_debug.png")

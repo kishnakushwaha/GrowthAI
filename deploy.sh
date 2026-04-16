@@ -6,7 +6,6 @@
 echo "🚀 Preparing GrowthAI Deployment..."
 
 # 1. Load env vars from backend/.env into a comma-separated list
-# We use sed to handle potential spaces and ensure a clean CSV format
 ENV_VARS=$(cat backend/.env | xargs | sed 's/ /,/g')
 
 if [ -z "$ENV_VARS" ]; then
@@ -16,12 +15,11 @@ fi
 
 echo "📦 Uploading sources and building container..."
 
-# 2. Execute gcloud deploy from root
-# We include --clear-base-image to handle the switch from Buildpacks to Dockerfile
+# 2. Deploy using --source (builds + deploys in one step)
 gcloud run deploy growthai-backend \
   --source . \
   --region asia-south1 \
-  --clear-base-image \
+  --allow-unauthenticated \
   --set-env-vars "$ENV_VARS"
 
 echo "✅ Deployment Process Complete!"

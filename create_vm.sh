@@ -2,7 +2,7 @@
 
 # Create the VM instance
 gcloud compute instances create whatsapp-engine-node \
-    --project=alpine-beacon-487715-k3 \
+    --project=${GCP_PROJECT_ID:-"your-project-id"} \
     --zone=asia-south1-a \
     --machine-type=e2-micro \
     --tags=wa-engine \

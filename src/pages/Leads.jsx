@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { 
   Search, Download, Filter, Flame, Globe, Phone, MapPin, Star, 
   ExternalLink, Loader2, PlayCircle, X, ChevronLeft, ChevronRight,
@@ -40,6 +40,15 @@ const Leads = () => {
   const [scrapeLog, setScrapeLog] = useState([]);
   const [showScrapePanel, setShowScrapePanel] = useState(() => !!sessionStorage.getItem('activeScrapeJob'));
   const [activeJobId, setActiveJobId] = useState(() => sessionStorage.getItem('activeScrapeJob') || null);
+  const logEndRef = useRef(null);
+
+  const scrollToBottom = () => {
+    logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    if (scrapeLog.length > 0) scrollToBottom();
+  }, [scrapeLog]);
 
   const fetchLeads = useCallback(async () => {
     setLoading(true);
@@ -335,7 +344,14 @@ const Leads = () => {
       {showScrapePanel && (
         <div className="scrape-panel glass-panel">
           <div className="scrape-panel-header">
-            <h3>🔍 Run Google Maps Scraper</h3>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <h3>🔍 Run Google Maps Scraper</h3>
+              {scraping && (
+                <span className="work-progress-badge">
+                  <Loader2 size={12} className="spin" /> Work in Progress
+                </span>
+              )}
+            </div>
             <button onClick={() => setShowScrapePanel(false)}><X size={20} color="var(--text-muted)" /></button>
           </div>
           <div className="scrape-form">
@@ -369,6 +385,7 @@ const Leads = () => {
                       {line}
                     </div>
                   ))}
+                  <div ref={logEndRef} />
                 </div>
                 {!scraping && scrapeLog.some(l => l.includes('Conflict')) && (
                   <button 

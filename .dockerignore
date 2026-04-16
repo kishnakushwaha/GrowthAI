@@ -1,18 +1,23 @@
-# X2: Security — Never bake secrets into Docker images
+# Security — Never bake secrets into Docker images
 .env
 backend/.env
 backend/wa-service/.env
-*.env
+
+# Build Conflicts
+backend/package-lock.json
+backend/Dockerfile
+node_modules/
+**/node_modules/
 
 # Git
 .git
 .gitignore
 
 # Development
-node_modules
 scraper/venv
 scraper/__pycache__
 scraper/leads.db
+dist/
 
 # IDE
 .vscode
@@ -22,8 +27,7 @@ scraper/leads.db
 # Extension (not needed in server container)
 extension/
 
-# Docs & artifacts
+# Docs & artifacts (but NOT index.html)
 docs/
 *.md
-*.html
 .agent/

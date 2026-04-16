@@ -24,6 +24,7 @@ const app = express();
 const ALLOWED_ORIGINS = [
   'http://localhost:5173',
   'http://localhost:3001',
+  'https://growthai.kishnaxai.in',
   'https://growthai-backend-814429723132.asia-south1.run.app',
   process.env.FRONTEND_URL
 ].filter(Boolean);
@@ -111,7 +112,11 @@ function verifyPassword(password, hash, salt) {
 }
 
 // ===================== AUTH & SECURITY =====================
-const JWT_SECRET = process.env.ADMIN_PASSWORD || 'growthai-secret-key-123';
+const JWT_SECRET = process.env.ADMIN_PASSWORD;
+
+if (!JWT_SECRET) {
+  console.warn('⚠️ WARNING: ADMIN_PASSWORD environment variable is not set!');
+}
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, 
@@ -619,7 +624,12 @@ setInterval(async () => {
     }
 
     const scraperScript = path.join(SCRAPER_DIR, 'main.py');
-    const proc = spawn(pythonPath, [scraperScript, job.query, job.target_count.toString(), req.user?.agencyId || "00000000-0000-0000-0000-000000000001"], {
+    const proc = spawn(pythonPath, [
+      scraperScript, 
+      job.query, 
+      job.target_count.toString(), 
+      job.agency_id || "00000000-0000-0000-0000-000000000001"
+    ], {
       cwd: SCRAPER_DIR,
       env: { ...process.env, PYTHONUNBUFFERED: '1' }
     });
@@ -676,7 +686,8 @@ app.post('/api/scrape', requireAuth, async (req, res) => {
 
     const { data, error } = await supabase.from('scrape_jobs').insert({
       query,
-      target_count: count
+      target_count: count,
+      agency_id: req.user?.agencyId || "00000000-0000-0000-0000-000000000001"
     }).select('id').single();
 
     if (error) throw error;
@@ -691,10 +702,12 @@ app.post('/api/scrape', requireAuth, async (req, res) => {
 // POST /api/scrape/reset — Force reset any jammed scrape jobs
 app.post('/api/scrape/reset', requireAuth, async (req, res) => {
   try {
-    await supabase.from('scrape_jobs').update({ status: 'failed', error_log: 'Manually reset by user' }).eq('status', 'running');
+    // Clear both running AND pending jobs to ensure a complete clean slate
+    await supabase.from('scrape_jobs').update({ status: 'failed', error_log: 'Manually reset by user' }).in('status', ['running', 'pending']);
+    
     // Also clear in-memory activeJobs
     Object.keys(activeJobs).forEach(key => delete activeJobs[key]);
-    res.json({ success: true, message: 'Scraper system reset. All running jobs marked as failed.' });
+    res.json({ success: true, message: 'Scraper system reset. All running and pending jobs cleared.' });
   } catch (err) {
     res.status(500).json({ error: 'System reset failed' });
   }
@@ -1373,20 +1386,34 @@ app.post('/api/intelligence/enrich/:id', requireAuth, async (req, res) => {
 
     const geminiData = await geminiRes.json();
     const rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-    const cleanedJson = rawText.replace(/```[a-z]*\n/g, '').replace(/```/g, '').trim();
-    const aiData = JSON.parse(cleanedJson);
+    
+    // Robust cleaning for common LLM markdown formatting
+    let aiData = { ai_human_summary: "N/A", ai_first_line: "Hi there!" };
+    try {
+      const cleanedJson = rawText.replace(/```[a-z]*\n/g, '').replace(/```/g, '').trim();
+      aiData = { ...aiData, ...JSON.parse(cleanedJson) };
+    } catch (parseErr) {
+      log.warn('AI JSON Parse failed, using fallback regex', { rawText });
+      const summaryMatch = rawText.match(/"ai_human_summary":\s*"([^"]+)"/);
+      const firstLineMatch = rawText.match(/"ai_first_line":\s*"([^"]+)"/);
+      if (summaryMatch) aiData.ai_human_summary = summaryMatch[1];
+      if (firstLineMatch) aiData.ai_first_line = firstLineMatch[1];
+    }
 
     const { data: updated, error: upErr } = await supabase
       .from('website_enrichment')
       .update({ 
-        ai_human_summary: aiData.ai_human_summary, 
-        ai_first_line: aiData.ai_first_line 
+        ai_human_summary: aiData.ai_human_summary || "N/A", 
+        ai_first_line: aiData.ai_first_line || "Hi there!"
       })
       .eq('lead_id', id)
       .select('*, businesses:businesses!inner(place_name, website, industry, search_city)')
       .single();
 
-    if (upErr) throw upErr;
+    if (upErr) {
+      log.error('Database update failed after AI enrichment', { error: upErr.message });
+      throw upErr;
+    }
     res.json({ success: true, updated });
   } catch (err) {
     console.error('Enrichment failed:', err);
@@ -1928,6 +1955,20 @@ app.get('/api/wa/logs', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch logs' });
   }
 });
+
+// ===================== FRONTEND SERVING =====================
+// Serve the built Vite frontend from /app/dist (production only)
+const distPath = path.join(__dirname, '..', 'dist');
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+  // Catch-all: send index.html for any non-API route (React Router support)
+  app.get('*', (req, res) => {
+    if (!req.path.startsWith('/api/') && !req.path.startsWith('/health')) {
+      res.sendFile(path.join(distPath, 'index.html'));
+    }
+  });
+  console.log('📦 Serving frontend from:', distPath);
+}
 
 // ===================== HEALTH / CRON =====================
 
