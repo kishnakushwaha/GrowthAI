@@ -103,6 +103,27 @@ const Sequences = () => {
     fetchSteps(campaign.id);
   };
 
+  const deleteCampaign = async (id, e) => {
+    e.stopPropagation();
+    if (!window.confirm("Are you sure? This will delete the sequence and stop all active enrollments.")) return;
+    try {
+      const res = await fetch(`${API}/api/sequences/campaigns/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (res.ok) {
+        fetchCampaigns();
+        if (activeCampaign?.id === id) setActiveCampaign(null);
+      } else {
+        alert(data.error || 'Failed to delete sequence');
+      }
+    } catch (err) { 
+      console.error('Delete error', err);
+      alert('Network error during deletion');
+    }
+  };
+
   return (
     <div className="admin-page">
       <div className="page-header" style={{ marginBottom: '1.5rem' }}>
@@ -128,14 +149,24 @@ const Sequences = () => {
               <div 
                 key={c.id} 
                 className={`sidebar-item ${activeCampaign?.id === c.id ? 'active' : ''}`}
-                style={{ padding: '15px', marginBottom: '10px', borderRadius: '12px', border: activeCampaign?.id === c.id ? '1px solid var(--primary)' : '1px solid transparent' }}
+                style={{ padding: '15px', marginBottom: '10px', borderRadius: '12px', border: activeCampaign?.id === c.id ? '1px solid var(--primary)' : '1px solid transparent', display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}
                 onClick={() => selectCampaign(c)}
               >
-                <div>
+                <div style={{ flex: 1 }}>
                   <strong style={{ display: 'block' }}>{c.name}</strong>
                   <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{c.industry || 'All Industries'}</span>
                 </div>
-                <ChevronRight size={18} className="item-chevron" />
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <button 
+                    onClick={(e) => deleteCampaign(c.id, e)}
+                    style={{ background: 'none', border: 'none', color: 'rgba(239, 68, 68, 0.4)', padding: '4px', borderRadius: '4px', cursor: 'pointer', transition: 'all 0.2s' }}
+                    className="delete-item-btn"
+                    title="Delete Sequence"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                  <ChevronRight size={18} className="item-chevron" />
+                </div>
               </div>
             ))
           )}

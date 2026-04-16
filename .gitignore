@@ -7,29 +7,78 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies
 node_modules
+**/node_modules
+jspm_packages
+
+# Build / Production
 dist
 dist-ssr
+out
+build
 *.local
 
-# Editor directories and files
+# Editor / System
 .vscode/*
 !.vscode/extensions.json
 .idea
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
 
-# ===== SECURITY - NEVER PUSH =====
+# Security - NEVER PUSH
 .env
-backend/.env
+**/.env
+.env.*
+!.env.example
 *.db
+*.sqlite
+credentials.json
+*.pem
+*.key
 
 # Python
-__pycache__
-*.pyc
-scraper/venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 scraper/leads.db
+
+# Agent specific
+.agent/*
+growthai_final_synthesis_report.html
+growthai_full_context.md.resolved
+action_plan.md
+architecture_graph.md
+docs/*.md
+!docs/README.md
+!docs/MASTER_PLAN.md

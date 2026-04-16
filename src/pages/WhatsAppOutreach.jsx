@@ -8,22 +8,42 @@ import './WhatsAppOutreach.css';
 
 const TEMPLATES_STORAGE_KEY = 'growthai_whatsapp_templates_v2';
 
-// Default templates if none exist
+// Expanded High-Converting WhatsApp Templates (Email-Matched)
 const DEFAULT_TEMPLATES = [
   {
-    id: 'tpl_wa_high_reply',
-    name: 'Curiosity Opener (High-Reply)',
-    body: 'Hi [[contact_name]],\n\nI came across [[business_name]] while reviewing businesses in [[city]].\n\nI noticed a few missed opportunities where you could get more customer enquiries from Google & Meta Ads — especially from people already searching for your service.\n\nI recorded a quick visibility check for your business.\n\nWould you like me to share it with you here?'
+    id: 'tpl_wa_audit_intro',
+    name: 'Website Audit Intro',
+    body: 'Hi [[contact_name]],\n\nI was doing some competitive research in [[city]] and noticed [[business_name]] is losing desktop search traffic to competitors.\n\nI just finished recording a quick video showing exactly where the leaks are on your site.\n\nWould you like me to send over the link?'
   },
   {
-    id: 'tpl_wa_authority',
-    name: 'Authority Version (Lead Gen)',
-    body: 'Hi [[contact_name]],\n\nWhile analysing local businesses in [[city]], I noticed [[business_name]] isn\'t fully capturing leads from Google search traffic yet.\n\nWe help businesses like yours generate consistent enquiries using Google ranking + Meta Ads.\n\nI prepared a short improvement report for your business.\n\nCan I send it here?'
+    id: 'tpl_wa_day1_curiosity',
+    name: 'Day 1 - Curiosity Opener',
+    body: 'Hey [[contact_name]], quick question.\n\nAre you currently taking on more clients for [[business_name]] this month or are you fully booked?\n\nI have a strategy working really well in [[city]] right now and wanted to see if you had capacity first.'
   },
   {
-    id: 'tpl_wa_niche',
-    name: 'Niche Specific (Clinic/Real Estate)',
-    body: 'Hi [[contact_name]],\n\nI checked how people search for your services in [[city]] and noticed [[business_name]] is missing some high-intent leads from Google.\n\nUsually businesses in your category generate 20–40 extra enquiries monthly after fixing this.\n\nI made a quick visibility report for you.\n\nShould I share it here?'
+    id: 'tpl_wa_day3_value',
+    name: 'Day 3 - Value Reinforcement',
+    body: 'Morning [[contact_name]],\n\nJust bumping this up. I actually mapped out a 3-step blueprint on how [[business_name]] can add 15-20 more appointments next month using your existing traffic.\n\nIt takes 2 minutes to read. Share it here?'
+  },
+  {
+    id: 'tpl_wa_followup_day3',
+    name: 'Follow-Up (Day 3)',
+    body: 'Hi [[contact_name]], just bubbling this to the top of your inbox.\n\nLet me know if you want to see the report, no pressure either way. Hope business is booming!'
+  },
+  {
+    id: 'tpl_wa_day7_proof',
+    name: 'Social Proof (Day 7)',
+    body: 'Hey [[contact_name]],\n\nNot sure if you saw my last message, but we just helped another business similar to [[business_name]] hit a 40% increase in lead conversions in 30 days.\n\nWould be happy to show you their exact framework on a quick 10 min call later this week?'
+  },
+  {
+    id: 'tpl_wa_day7_soft_close',
+    name: 'Day 7 - Soft Close (High Reply)',
+    body: 'Hi [[contact_name]],\n\nSeems like timing might be off right now for [[business_name]].\n\nI’ll stop bugging you, but if you ever want to scale up your lead flow in [[city]], you have my number!\n\nCheers.'
+  },
+  {
+    id: 'tpl_wa_b2b_founder',
+    name: 'B2B Founder Cold Pitch',
+    body: 'Hey [[contact_name]], founder to founder.\n\nI run an AI growth agency and we help companies like [[business_name]] automate their lead pipeline.\n\nInstead of pitching you, can I just send over a free mini-audit of your current setup?'
   }
 ];
 

@@ -1,0 +1,29 @@
+# X2: Security — Never bake secrets into Docker images
+.env
+backend/.env
+backend/wa-service/.env
+*.env
+
+# Git
+.git
+.gitignore
+
+# Development
+node_modules
+scraper/venv
+scraper/__pycache__
+scraper/leads.db
+
+# IDE
+.vscode
+.idea
+.DS_Store
+
+# Extension (not needed in server container)
+extension/
+
+# Docs & artifacts
+docs/
+*.md
+*.html
+.agent/

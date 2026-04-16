@@ -1,4 +1,4 @@
-import supabase from './supabaseClient.js';
+import supabase from '../supabaseClient.js';
 
 // ==================== PIPELINE STAGES ====================
 
@@ -135,14 +135,36 @@ export async function deleteLead(id) {
 // ==================== ACTIVITIES ====================
 
 export async function getActivities(leadId) {
-  const { data, error } = await supabase
+  // 1. Get standard activities (notes, manual stage changes)
+  const { data: standardActivities, error } = await supabase
     .from('activities')
     .select('*')
-    .eq('lead_id', leadId)
-    .order('created_at', { ascending: false });
+    .eq('lead_id', leadId);
   
   if (error) throw new Error(error.message);
-  return data || [];
+
+  // 2. Get AI Outreach history to show the "AI Previews"
+  const { data: outreachLogs, error: outreachErr } = await supabase
+    .from('pending_outreach')
+    .select('*')
+    .eq('lead_id', leadId);
+
+  // 3. Map outreach logs into the timeline format
+  const mappedOutreach = (outreachLogs || []).map(log => ({
+    id: `outreach_${log.id}`,
+    lead_id: leadId,
+    type: log.channel || 'whatsapp',
+    title: `Drip Message (${log.status})`,
+    description: log.message_body,
+    original_body: log.original_body, // Ensures AI Preview CSS works
+    created_at: log.created_at
+  }));
+
+  // Combine and sort by newest first
+  const allActivities = [...(standardActivities || []), ...mappedOutreach];
+  allActivities.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+  return allActivities;
 }
 
 export async function addActivity(leadId, data) {
@@ -186,7 +208,16 @@ export async function importFromScraper() {
     const key = `${lead.place_name}||${lead.phone || ''}`;
     if (existingSet.has(key)) continue;
 
-    const isHot = !lead.website || (lead.reviews && lead.reviews < 15);
+    // PHASE 11: Intelligent Lead Scoring
+    let score = 50; // Base score
+    if (!lead.website) score += 20; // High need for web services
+    if (lead.reviews && lead.reviews < 10) score += 20; // New/struggling profile
+    if (lead.rating && lead.rating < 4.2) score += 10; // Needs reputation repair
+    if (lead.is_hot_lead) score += 10;
+    
+    // Normalize to 100 max
+    score = Math.min(100, score);
+
     toInsert.push({
       business_name: lead.place_name,
       phone: lead.phone || '',
@@ -194,7 +225,9 @@ export async function importFromScraper() {
       address: lead.address || '',
       industry: lead.industry || '',
       source: 'scraper',
-      priority: isHot ? 'high' : 'medium',
+      priority: score >= 80 ? 'high' : 'medium',
+      lead_score: score,
+      business_id: lead.id, // A3: Link back to businesses table
       notes: `Rating: ${lead.rating || 'N/A'} | Reviews: ${lead.reviews || 0} | Hot Lead: ${lead.is_hot_lead ? 'Yes' : 'No'}`
     });
   }

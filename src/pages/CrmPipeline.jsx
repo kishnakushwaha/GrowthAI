@@ -63,6 +63,25 @@ const CrmPipeline = () => {
   // New activity
   const [newActivity, setNewActivity] = useState({ type: 'note', title: '', description: '' });
 
+  // Campaign Enrollment
+  const [campaigns, setCampaigns] = useState([]);
+  const [selectedCampaignId, setSelectedCampaignId] = useState('');
+  const [enrolling, setEnrolling] = useState(false);
+
+  const fetchCampaignList = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/api/sequences/campaigns`, { headers });
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setCampaigns(data);
+      } else if (data.campaigns) {
+        setCampaigns(data.campaigns);
+      }
+    } catch (err) {
+      console.error('Failed to load campaigns', err);
+    }
+  }, [token]);
+
   // Importing
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState('');
@@ -86,6 +105,7 @@ const CrmPipeline = () => {
   }, [token, search, filterStage, filterPriority]);
 
   useEffect(() => { fetchLeads(); }, [fetchLeads]);
+  useEffect(() => { fetchCampaignList(); }, [fetchCampaignList]);
 
   // Fetch analytics
   const fetchAnalytics = async () => {
@@ -311,7 +331,14 @@ const CrmPipeline = () => {
                 {(groupedLeads[stage.id] || []).map(lead => (
                   <div key={lead.id} className="kanban-card" onClick={() => openDetail(lead)}>
                     <div className="kanban-card-header">
-                      <span className="kanban-card-name">{lead.business_name}</span>
+                      <div className="kanban-card-name-wrapper">
+                        <span className="kanban-card-name">{lead.business_name}</span>
+                        {lead.lead_score && (
+                          <span className={`score-badge ${lead.lead_score >= 80 ? 'score-high' : ''}`}>
+                            {lead.lead_score}
+                          </span>
+                        )}
+                      </div>
                       <span className={`priority-dot priority-${lead.priority}`} title={lead.priority}></span>
                     </div>
                     {lead.contact_name && <div className="kanban-card-contact">{lead.contact_name}</div>}
@@ -319,8 +346,11 @@ const CrmPipeline = () => {
                       {lead.phone && <span><Phone size={11} /> {lead.phone}</span>}
                       {lead.industry && <span className="kanban-tag">{lead.industry}</span>}
                     </div>
-                    {lead.deal_value > 0 && (
-                      <div className="kanban-card-value">₹{lead.deal_value.toLocaleString()}</div>
+                    {(lead.deal_value > 0 || lead.lead_score) && (
+                      <div className="kanban-card-footer">
+                        {lead.deal_value > 0 && <span className="kanban-card-value">₹{lead.deal_value.toLocaleString()}</span>}
+                        {lead.lead_score >= 90 && <span className="hot-tag">🔥 Hot</span>}
+                      </div>
                     )}
                     {lead.next_followup && (
                       <div className={`kanban-card-followup ${new Date(lead.next_followup) < new Date() ? 'overdue' : ''}`}>
@@ -364,6 +394,7 @@ const CrmPipeline = () => {
                   <th>Contact</th>
                   <th>Stage</th>
                   <th>Priority</th>
+                  <th>Score</th>
                   <th>Deal Value</th>
                   <th>Follow-up</th>
                   <th>Actions</th>
@@ -389,6 +420,14 @@ const CrmPipeline = () => {
                       <span className={`priority-badge priority-${lead.priority}`}>
                         {lead.priority}
                       </span>
+                    </td>
+                    <td>
+                      {lead.lead_score ? (
+                        <div className={`score-bar-mini ${lead.lead_score >= 80 ? 'high' : ''}`}>
+                          <div className="score-fill" style={{ width: `${lead.lead_score}%` }}></div>
+                          <span>{lead.lead_score}</span>
+                        </div>
+                      ) : '—'}
                     </td>
                     <td style={{ fontWeight: 600 }}>
                       {lead.deal_value > 0 ? `₹${lead.deal_value.toLocaleString()}` : '—'}
@@ -696,6 +735,50 @@ const CrmPipeline = () => {
               </div>
             </div>
 
+            {/* Enroll in Sequence */}
+            <div className="detail-activity-add" style={{ marginTop: '1rem' }}>
+              <h4>🚀 Enroll in Sequence</h4>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <select 
+                  className="admin-input" 
+                  style={{ flex: 1 }}
+                  value={selectedCampaignId} 
+                  onChange={e => setSelectedCampaignId(e.target.value)}
+                >
+                  <option value="">-- Select a Sequence --</option>
+                  {campaigns.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+                <button 
+                  className="btn btn-primary" 
+                  disabled={enrolling || !selectedCampaignId}
+                  onClick={async () => {
+                    setEnrolling(true);
+                    try {
+                      const res = await fetch(`${API}/api/sequences/enroll`, {
+                        method: 'POST',
+                        headers,
+                        body: JSON.stringify({ campaign_id: selectedCampaignId, lead_id: detailLead.id })
+                      });
+                      const data = await res.json();
+                      if (data.success) {
+                        alert("Lead enrolled successfully! The sequence engine will begin tracking them.");
+                        setSelectedCampaignId('');
+                      } else {
+                        alert("Could not enroll: " + data.error);
+                      }
+                    } catch(e) {
+                      console.error("Enrollment failed:", e);
+                    }
+                    setEnrolling(false);
+                  }}
+                >
+                  {enrolling ? 'Enrolling...' : 'Enroll Lead'}
+                </button>
+              </div>
+            </div>
+
             {/* Add Activity */}
             <div className="detail-activity-add">
               <h4>📝 Log Activity</h4>
@@ -719,22 +802,59 @@ const CrmPipeline = () => {
             {/* Activity Timeline */}
             <div className="detail-timeline">
               <h4>🕐 Activity History</h4>
-              {activities.length === 0 ? (
-                <p className="text-muted" style={{ fontSize: '0.85rem' }}>No activities logged yet</p>
-              ) : (
-                activities.map(a => (
-                  <div key={a.id} className="timeline-item">
-                    <div className="timeline-dot"></div>
-                    <div className="timeline-content">
+              {/* Activity Timeline will now only show real records */}
+
+              {activities.map(a => (
+                <div key={a.id} className="timeline-item">
+                  <div className="timeline-dot"></div>
+                  <div className="timeline-content">
+                    <div className="timeline-title-row">
                       <strong>{a.title}</strong>
-                      {a.description && <p className="text-muted" style={{ fontSize: '0.75rem', margin: '2px 0 0' }}>{a.description}</p>}
+                      {a.original_body && (
+                        <span className="ai-personalization-tag">
+                          <Star size={10} fill="currentColor" /> AI Boosted
+                        </span>
+                      )}
                     </div>
-                    <span className="timeline-time text-muted">
-                      {new Date(a.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                    </span>
+                    {a.description && <p className="text-muted" style={{ fontSize: '0.75rem', margin: '2px 0 0' }}>{a.description}</p>}
+                    
+                    {/* AI Preview Comparison */}
+                    {a.original_body && (
+                      <div className="ai-comparison-preview">
+                        <div className="comparison-pane">
+                          <div className="pane-label">Original Template</div>
+                          <div className="pane-text">{a.original_body}</div>
+                        </div>
+                        <div className="comparison-divider">
+                          <ArrowRight size={14} />
+                        </div>
+                        <div className="comparison-pane ai-version">
+                          <div className="pane-label">Human-Fluid AI Version</div>
+                          <div className="pane-text">{a.message_body || a.description}</div>
+                          
+                          {/* REAL APPROVAL BUTTON */}
+                          <button 
+                            className="btn btn-primary" 
+                            style={{ marginTop: '12px', width: '100%', background: '#25D366', borderColor: '#25D366' }}
+                            onClick={() => {
+                              const msgBody = Math.random() > 0.5 ? (a.message_body || a.description) : (a.message_body || a.description);
+                              const msg = encodeURIComponent(msgBody);
+                              const phone = detailLead.phone ? detailLead.phone.replace(/[^0-9+]/g, '') : '';
+                              if (!phone) { alert("No phone number found for this lead."); return; }
+                              window.open(`https://web.whatsapp.com/send?phone=${phone}&text=${msg}&auto_send=true`, '_blank');
+                            }}
+                          >
+                            <Check size={14} /> Approve & Send via WhatsApp
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                ))
-              )}
+                  <span className="timeline-time text-muted">
+                    {new Date(a.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -744,3 +864,4 @@ const CrmPipeline = () => {
 };
 
 export default CrmPipeline;
+

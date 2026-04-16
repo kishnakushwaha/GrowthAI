@@ -1,6 +1,31 @@
 import nodemailer from 'nodemailer';
-import supabase from './supabaseClient.js';
+import supabase from '../supabaseClient.js';
 import { v4 as uuidv4 } from 'uuid';
+import crypto from 'crypto';
+
+// X8: SMTP credential encryption
+const ENCRYPTION_KEY = (process.env.ENCRYPTION_KEY || process.env.ADMIN_PASSWORD || 'growthAI-default-key-change-me').padEnd(32, '0').slice(0, 32);
+const ALGO = 'aes-256-gcm';
+
+function encrypt(text) {
+  const iv = crypto.randomBytes(16);
+  const cipher = crypto.createCipheriv(ALGO, ENCRYPTION_KEY, iv);
+  let encrypted = cipher.update(text, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  const tag = cipher.getAuthTag().toString('hex');
+  return iv.toString('hex') + ':' + tag + ':' + encrypted;
+}
+
+function decrypt(data) {
+  const [ivHex, tagHex, encrypted] = data.split(':');
+  const iv = Buffer.from(ivHex, 'hex');
+  const tag = Buffer.from(tagHex, 'hex');
+  const decipher = crypto.createDecipheriv(ALGO, ENCRYPTION_KEY, iv);
+  decipher.setAuthTag(tag);
+  let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+  decrypted += decipher.final('utf8');
+  return decrypted;
+}
 
 // ==================== TEMPLATE ENGINE ====================
 
@@ -75,10 +100,10 @@ export async function configureSmtp(config) {
     transporter = t;
     smtpEmail = config.email;
 
-    // Persist to Supabase settings table
+    // Persist to Supabase settings table — X8: password encrypted
     const { error: saveError } = await supabase.from('settings').upsert({
       key: 'smtp_config',
-      value: { email: config.email, password: config.password },
+      value: { email: config.email, password: encrypt(config.password), encrypted: true },
       updated_at: new Date().toISOString()
     }, { onConflict: 'key' });
 
@@ -99,13 +124,15 @@ export async function loadSmtpConfig() {
     if (error || !data) return null;
 
     const config = data.value;
+    // X8: Decrypt password if encrypted
+    const password = config.encrypted ? decrypt(config.password) : config.password;
     const t = nodemailer.createTransport({
       host: 'smtp.gmail.com',
       port: 465,
       secure: true,
       auth: {
         user: config.email,
-        pass: config.password
+        pass: password
       },
       tls: {
         rejectUnauthorized: false

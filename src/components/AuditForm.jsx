@@ -16,7 +16,10 @@ const AuditForm = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!url.trim()) return;
+    if (!url.trim() || !name.trim() || !phone.trim()) {
+      setError('Please fill in your name, phone, and website URL.');
+      return;
+    }
     setLoading(true);
     setError('');
     setResult(null);
@@ -80,20 +83,16 @@ const AuditForm = () => {
                 />
               </div>
               <div className="audit-form-group">
-                <label>Business Name</label>
-                <input type="text" className="audit-input" placeholder="Your Business Name" value={businessName} onChange={(e) => setBusinessName(e.target.value)} />
+                <label>Your Name *</label>
+                <input type="text" className="audit-input" placeholder="John Doe" value={name} onChange={(e) => setName(e.target.value)} required />
               </div>
               <div className="audit-form-group">
-                <label>Your Name</label>
-                <input type="text" className="audit-input" placeholder="John Doe" value={name} onChange={(e) => setName(e.target.value)} />
+                <label>Phone *</label>
+                <input type="tel" className="audit-input" placeholder="+91 98765 43210" value={phone} onChange={(e) => setPhone(e.target.value)} required />
               </div>
               <div className="audit-form-group">
                 <label>Email</label>
                 <input type="email" className="audit-input" placeholder="you@email.com" value={email} onChange={(e) => setEmail(e.target.value)} />
-              </div>
-              <div className="audit-form-group">
-                <label>Phone</label>
-                <input type="tel" className="audit-input" placeholder="+91 98765 43210" value={phone} onChange={(e) => setPhone(e.target.value)} />
               </div>
             </div>
 

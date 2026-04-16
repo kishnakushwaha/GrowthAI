@@ -3,30 +3,92 @@ import express from 'express';
 import cors from 'cors';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
 import jwt from 'jsonwebtoken';
 import rateLimit from 'express-rate-limit';
-import { runAudit } from './auditEngine.js';
+import cron from 'node-cron';
+import { runAudit } from './engines/auditEngine.js';
 import supabase from './supabaseClient.js';
-import { configureSmtp, getTransporter, getSmtpEmail, sendEmail, renderTemplate, trackOpen, trackClick, loadSmtpConfig } from './emailEngine.js';
-import { STAGES, getLeads, createLead, updateLead, deleteLead, getActivities, addActivity, importFromScraper, getAnalytics } from './crmEngine.js';
-import { processSequences } from './waSequenceEngine.js';
+import { configureSmtp, getTransporter, getSmtpEmail, sendEmail, renderTemplate, trackOpen, trackClick, loadSmtpConfig } from './engines/emailEngine.js';
+import { STAGES, getLeads, createLead, updateLead, deleteLead, getActivities, addActivity, importFromScraper, getAnalytics } from './engines/crmEngine.js';
+import { processSequences } from './engines/waSequenceEngine.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-app.use(cors());
+
+// A11: CORS Allowlist — restrict to frontend + extension origins
+const ALLOWED_ORIGINS = [
+  'http://localhost:5173',
+  'http://localhost:3001',
+  'https://growthai-backend-814429723132.asia-south1.run.app',
+  process.env.FRONTEND_URL
+].filter(Boolean);
+app.use(cors({ origin: ALLOWED_ORIGINS, credentials: true }));
 app.use(express.json());
 
-// Global Request Logger for Debugging
+// A1: Extension Token Auth — protects extension-facing endpoints
+const EXTENSION_SECRET = process.env.EXTENSION_SECRET || process.env.ADMIN_PASSWORD;
+const requireExtAuth = (req, res, next) => {
+  const token = req.headers['x-extension-token'];
+  if (token && token === EXTENSION_SECRET) return next();
+  // Fallback: also accept JWT Bearer tokens (for CRM-triggered calls)
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const decoded = jwt.verify(authHeader.split(' ')[1], process.env.ADMIN_PASSWORD || 'growthai-secret-key-123');
+      if (decoded.role === 'admin') return next();
+    } catch (e) {}
+  }
+  return res.status(401).json({ error: 'Unauthorized: Missing or invalid extension token' });
+};
+
+// X5: Structured Logger — outputs JSON for Cloud Logging, human-readable locally
+const IS_PRODUCTION = process.env.NODE_ENV === 'production' || process.env.K_SERVICE;
+const log = {
+  info: (msg, meta = {}) => {
+    if (IS_PRODUCTION) {
+      console.log(JSON.stringify({ severity: 'INFO', message: msg, ...meta, timestamp: new Date().toISOString() }));
+    } else {
+      console.log(`[INFO] ${msg}`, Object.keys(meta).length ? meta : '');
+    }
+  },
+  warn: (msg, meta = {}) => {
+    if (IS_PRODUCTION) {
+      console.warn(JSON.stringify({ severity: 'WARNING', message: msg, ...meta, timestamp: new Date().toISOString() }));
+    } else {
+      console.warn(`[WARN] ${msg}`, Object.keys(meta).length ? meta : '');
+    }
+  },
+  error: (msg, meta = {}) => {
+    if (IS_PRODUCTION) {
+      console.error(JSON.stringify({ severity: 'ERROR', message: msg, ...meta, timestamp: new Date().toISOString() }));
+    } else {
+      console.error(`[ERROR] ${msg}`, Object.keys(meta).length ? meta : '');
+    }
+  }
+};
+
+// X5: Async route wrapper — catches unhandled rejections and returns 500
+const asyncHandler = (fn) => (req, res, next) => {
+  Promise.resolve(fn(req, res, next)).catch((err) => {
+    log.error('Unhandled route error', { route: `${req.method} ${req.url}`, error: err.message, stack: err.stack });
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Internal Server Error', details: err.message });
+    }
+  });
+};
+
+// Global Request Logger
 app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+  log.info(`${req.method} ${req.url}`);
   next();
 });
 
-const CONTENT_FILE = path.join(__dirname, 'content.json');
+const CONTENT_FILE = path.join(__dirname, 'database', 'content.json');
 const SCRAPER_DIR = path.join(__dirname, '..', 'scraper');
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
 
@@ -38,12 +100,22 @@ if (!ADMIN_PASSWORD) {
 // Track active scrape jobs
 const activeJobs = {};
 
+// Helper to hash passwords natively
+function hashPassword(password, salt) {
+  return crypto.scryptSync(password, salt, 64).toString('hex');
+}
+
+function verifyPassword(password, hash, salt) {
+  const newHash = hashPassword(password, salt);
+  return newHash === hash;
+}
+
 // ===================== AUTH & SECURITY =====================
 const JWT_SECRET = process.env.ADMIN_PASSWORD || 'growthai-secret-key-123';
 
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 10, // Limit each IP to 10 login requests per window
+  windowMs: 15 * 60 * 1000, 
+  max: 10, 
   message: { error: 'Too many login attempts, please try again after 15 minutes' }
 });
 
@@ -56,20 +128,213 @@ const requireAuth = (req, res, next) => {
   const token = authHeader.split(' ')[1];
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    if (decoded.role !== 'admin') throw new Error('Invalid role');
+    req.user = decoded; // { userId, agencyId, role }
     next();
   } catch (err) {
     return res.status(401).json({ error: 'Unauthorized access: Invalid or Expired Token' });
   }
 };
 
-app.post('/api/login', authLimiter, (req, res) => {
-  const { password } = req.body;
-  if (password === ADMIN_PASSWORD) {
-    const token = jwt.sign({ role: 'admin' }, JWT_SECRET, { expiresIn: '24h' });
-    res.json({ success: true, token });
-  } else {
-    res.status(401).json({ error: 'Invalid password' });
+app.post('/api/login', authLimiter, async (req, res) => {
+  const { email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+  
+  try {
+    // S2 Phase: Authenticate against users table
+    const { data: user, error } = await supabase.from('users').select('*').eq('email', email).single();
+    if (error || !user) {
+      // Legacy Fallback (during migration)
+      if (email === 'admin@growthai.com' && password === ADMIN_PASSWORD) {
+        const token = jwt.sign({ role: 'admin', agencyId: '00000000-0000-0000-0000-000000000001' }, JWT_SECRET, { expiresIn: '24h' });
+        return res.json({ token, role: 'admin' });
+      }
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Default salt logic
+    let isValid = false;
+    if (user.password_hash.includes(':')) {
+      const [salt, hash] = user.password_hash.split(':');
+      isValid = verifyPassword(password, hash, salt);
+    } else {
+      // Emergency unhashed check or fallback
+      if (password === user.password_hash || (user.password_hash === 'admin_password_fallback' && password === ADMIN_PASSWORD)) {
+        isValid = true;
+      }
+    }
+
+    if (!isValid) return res.status(401).json({ error: 'Invalid credentials' });
+
+    const token = jwt.sign({ 
+      userId: user.id, 
+      agencyId: user.agency_id, 
+      role: user.role 
+    }, JWT_SECRET, { expiresIn: '24h' });
+
+    res.json({ token, role: user.role, name: user.name });
+  } catch (err) {
+    console.error('Login error:', err);
+    res.status(500).json({ error: 'Internal server error during login' });
+  }
+});
+
+// S2: Public Signup API for New Agencies
+app.post('/api/signup', authLimiter, async (req, res) => {
+  const { agencyName, name, email, password } = req.body;
+  if (!agencyName || !name || !email || !password) {
+    return res.status(400).json({ error: 'All fields are required' });
+  }
+
+  try {
+    // 1. Check if email is already registered
+    const { data: existingUser } = await supabase.from('users').select('id').eq('email', email).maybeSingle();
+    if (existingUser) return res.status(400).json({ error: 'Email already registered' });
+
+    // 2. Create the Agency
+    const { data: agency, error: agencyError } = await supabase.from('agencies').insert({
+      name: agencyName
+    }).select('id').single();
+    
+    if (agencyError) throw agencyError;
+
+    // 3. Create the Master Admin User for this new agency
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = hashPassword(password, salt);
+    const password_hash = `${salt}:${hash}`;
+
+    const { data: user, error: userError } = await supabase.from('users').insert({
+      agency_id: agency.id,
+      name,
+      email,
+      password_hash,
+      role: 'admin'
+    }).select('id, agency_id, role, name').single();
+
+    if (userError) throw userError;
+
+    // 4. Issue JWT
+    const token = jwt.sign({ 
+      userId: user.id, 
+      agencyId: user.agency_id, 
+      role: user.role 
+    }, JWT_SECRET, { expiresIn: '24h' });
+
+    res.json({ token, role: user.role, name: user.name });
+  } catch (err) {
+    console.error('Signup error:', err);
+    res.status(500).json({ error: 'Failed to create agency account' });
+  }
+});
+
+// S2: User Management APIs (Agency Level)
+app.get('/api/users', requireAuth, async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('users').select('id, name, email, role, created_at').eq('agency_id', req.user.agencyId);
+    if (error) throw error;
+    res.json({ users: data || [] });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch team members' });
+  }
+});
+
+app.post('/api/users', requireAuth, async (req, res) => {
+  // Only admins can create new team members
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Permission denied' });
+  
+  const { name, email, password, role } = req.body;
+  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+  
+  try {
+    const salt = crypto.randomBytes(16).toString('hex');
+    const hash = hashPassword(password, salt);
+    const password_hash = `${salt}:${hash}`;
+    
+    const { data, error } = await supabase.from('users').insert({
+      agency_id: req.user.agencyId,
+      name,
+      email,
+      password_hash,
+      role: role || 'member'
+    }).select('id, name, email, role');
+    
+    if (error) throw error;
+    res.json({ success: true, user: data[0] });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create team member (email may already in use)' });
+  }
+});
+
+// ===================== S3 GDPR COMPLIANCE API =====================
+
+// Right to Portability (Export all data)
+app.get('/api/agency/export', requireAuth, async (req, res) => {
+  try {
+    const [
+      { data: leads },
+      { data: campaigns },
+      { data: templates }
+    ] = await Promise.all([
+      supabase.from('businesses').select('*').eq('agency_id', req.user.agencyId),
+      supabase.from('campaigns').select('*').eq('agency_id', req.user.agencyId),
+      supabase.from('templates').select('*').eq('agency_id', req.user.agencyId)
+    ]);
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', 'attachment; filename=agency_export.json');
+    res.send(JSON.stringify({
+      export_date: new Date().toISOString(),
+      agency_id: req.user.agencyId,
+      user_id: req.user.userId,
+      leads: leads || [],
+      campaigns: campaigns || [],
+      templates: templates || []
+    }, null, 2));
+  } catch (err) {
+    res.status(500).json({ error: 'Data export failed' });
+  }
+});
+
+// Right to be Forgotten (Soft Delete Workspace)
+app.put('/api/agency/archive', requireAuth, async (req, res) => {
+  // Only the master admin token should delete the entire workspace
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Only admins can delete the workspace' });
+
+  try {
+    // Soft Delete the Agency
+    await supabase.from('agencies').update({ 
+      is_deleted: true, 
+      deleted_at: new Date().toISOString() 
+    }).eq('id', req.user.agencyId);
+
+    // Soft delete all users belonging to the agency so they can't login
+    await supabase.from('users').update({ is_deleted: true }).eq('agency_id', req.user.agencyId);
+
+    res.json({ success: true, message: 'Agency workspace successfully archived and locked.' });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to archive workspace' });
+  }
+});
+
+// ===================== S5 BILLING TELEMETRY API =====================
+
+app.get('/api/billing/usage', requireAuth, async (req, res) => {
+  try {
+    const { data: usageData, error } = await supabase
+      .from('usage_events')
+      .select('event_type, quantity')
+      .eq('agency_id', req.user.agencyId);
+      
+    if (error) throw error;
+    
+    // Aggregate by event type
+    const metrics = (usageData || []).reduce((acc, curr) => {
+      acc[curr.event_type] = (acc[curr.event_type] || 0) + curr.quantity;
+      return acc;
+    }, { scrape_job: 0, ai_rewrite: 0, email_sent: 0 });
+
+    res.json({ metrics });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch usage metrics' });
   }
 });
 
@@ -100,7 +365,7 @@ app.get('/api/leads', requireAuth, async (req, res) => {
   try {
     const { industry, min_rating, hot_only, no_website, low_reviews, search, sort_by, sort_dir, page = 1, limit = 50 } = req.query;
 
-    let query = supabase.from('businesses').select('*, website_enrichment(*)', { count: 'exact' });
+    let query = supabase.from('businesses').select('*, website_enrichment(*)', { count: 'exact' }).eq('agency_id', req.user.agencyId);
 
     if (industry) query = query.ilike('industry', `%${industry}%`);
     if (min_rating) query = query.gte('rating', parseFloat(min_rating));
@@ -142,7 +407,22 @@ app.get('/api/leads', requireAuth, async (req, res) => {
     // Industries
     const industries = [...new Set(all.map(b => b.industry).filter(Boolean))].sort();
 
-    res.json({ leads: leads || [], total: total || 0, stats, industries });
+    // F9: Compute enrichment completeness per lead
+    const enrichedLeads = (leads || []).map(lead => {
+      let filled = 0;
+      let total = 8;
+      if (lead.phone && lead.phone !== 'N/A') filled++;
+      if (lead.website && lead.website !== 'N/A' && lead.website !== '') filled++;
+      if (lead.rating && lead.rating !== 'N/A') filled++;
+      if (lead.reviews && lead.reviews > 0) filled++;
+      if (lead.address && lead.address !== 'N/A') filled++;
+      if (lead.industry && lead.industry !== '') filled++;
+      if (lead.website_enrichment && lead.website_enrichment.length > 0) filled++;
+      if (lead.website_enrichment?.[0]?.extracted_email) filled++;
+      return { ...lead, enrichment_pct: Math.round((filled / total) * 100) };
+    });
+
+    res.json({ leads: enrichedLeads, total: total || 0, stats, industries });
   } catch (error) {
     console.error('Leads fetch error:', error);
     res.status(500).json({ error: 'Failed to fetch leads' });
@@ -154,7 +434,8 @@ app.get('/api/signals', requireAuth, async (req, res) => {
   try {
     const { data: signals, error } = await supabase
       .from('website_enrichment')
-      .select('*, businesses(place_name, website, industry)')
+      .select('*, businesses:businesses!inner(id, place_name, website, industry, search_city)')
+      .eq('agency_id', req.user.agencyId)
       .order('scraped_at', { ascending: false });
 
     if (error) throw error;
@@ -170,6 +451,7 @@ app.get('/api/leads/export', requireAuth, async (req, res) => {
     const { data: leads, error } = await supabase
       .from('businesses')
       .select('*')
+      .eq('agency_id', req.user.agencyId)
       .order('scraped_at', { ascending: false });
 
     if (error) throw error;
@@ -201,7 +483,7 @@ app.get('/api/leads/export', requireAuth, async (req, res) => {
 // ===================== TEMPLATES (Phase 6.7) =====================
 app.get('/api/templates', requireAuth, async (req, res) => {
   try {
-    const { data: templates, error } = await supabase.from('templates').select('*').order('created_at', { ascending: false });
+    const { data: templates, error } = await supabase.from('templates').select('*').eq('agency_id', req.user.agencyId).order('created_at', { ascending: false });
     if (error) throw error;
     res.json({ templates: templates || [] });
   } catch (error) {
@@ -212,7 +494,9 @@ app.get('/api/templates', requireAuth, async (req, res) => {
 app.post('/api/templates', requireAuth, async (req, res) => {
   try {
     const { name, channel, opportunity_type, body } = req.body;
-    const { data, error } = await supabase.from('templates').insert([{ name, channel, opportunity_type, body }]).select().single();
+    const { data, error } = await supabase.from('templates').insert([{ 
+      name, channel, opportunity_type, body, agency_id: req.user.agencyId 
+    }]).select().single();
     if (error) throw error;
     res.json(data);
   } catch (error) {
@@ -282,16 +566,30 @@ Output only the raw rewritten WhatsApp message.`;
     });
     
     const geminiData = await geminiRes.json();
+    console.log('[Gemini Response Raw]:', JSON.stringify(geminiData));
+
     if (!geminiData.candidates || geminiData.candidates.length === 0) {
-        return res.status(500).json({ error: "NLP extraction failed." });
+        const errorMsg = geminiData.error?.message || "NLP extraction failed (Empty Candidate List).";
+        return res.status(500).json({ error: errorMsg });
     }
     
-    const rewritten = geminiData.candidates[0].content.parts[0].text;
-    res.json({ success: true, rewritten_body: rewritten.trim() });
-    
+    // Fix: Gemini sometimes wraps results in markdown blocks if the prompt isn't strict enough
+    const rawText = geminiData.candidates[0].content.parts[0].text || "";
+    const rewritten = rawText.replace(/```[a-z]*\n/g, '').replace(/```/g, '').trim();
+
+    // Log AI token usage (S5)
+    if (req.user && req.user.agencyId) {
+       await supabase.from('usage_events').insert({
+         agency_id: req.user.agencyId,
+         event_type: 'ai_rewrite',
+         quantity: 1
+       });
+    }
+
+    res.json({ success: true, rewritten_body: rewritten });
   } catch(e) {
-    console.error('AI Rewrite Error:', e);
-    res.status(500).json({ error: 'Failed to rewrite text' });
+    console.error('AI Rewrite Critical Error:', e);
+    res.status(500).json({ error: 'Internal NLP error: ' + e.message });
   }
 });
 
@@ -321,7 +619,7 @@ setInterval(async () => {
     }
 
     const scraperScript = path.join(SCRAPER_DIR, 'main.py');
-    const proc = spawn(pythonPath, [scraperScript, job.query, job.target_count.toString()], {
+    const proc = spawn(pythonPath, [scraperScript, job.query, job.target_count.toString(), req.user?.agencyId || "00000000-0000-0000-0000-000000000001"], {
       cwd: SCRAPER_DIR,
       env: { ...process.env, PYTHONUNBUFFERED: '1' }
     });
@@ -362,6 +660,20 @@ app.post('/api/scrape', requireAuth, async (req, res) => {
   }
 
   try {
+    // A8: Concurrency cap — only 1 scrape job at a time
+    const { data: running } = await supabase
+      .from('scrape_jobs')
+      .select('id')
+      .eq('status', 'running')
+      .limit(1);
+    
+    if (running && running.length > 0) {
+      return res.status(429).json({ 
+        error: 'A scrape is already running. Wait for it to finish.',
+        activeJobId: running[0].id.toString()
+      });
+    }
+
     const { data, error } = await supabase.from('scrape_jobs').insert({
       query,
       target_count: count
@@ -373,6 +685,18 @@ app.post('/api/scrape', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Failed to queue job', err);
     res.status(500).json({ error: 'Failed to queue job' });
+  }
+});
+
+// POST /api/scrape/reset — Force reset any jammed scrape jobs
+app.post('/api/scrape/reset', requireAuth, async (req, res) => {
+  try {
+    await supabase.from('scrape_jobs').update({ status: 'failed', error_log: 'Manually reset by user' }).eq('status', 'running');
+    // Also clear in-memory activeJobs
+    Object.keys(activeJobs).forEach(key => delete activeJobs[key]);
+    res.json({ success: true, message: 'Scraper system reset. All running jobs marked as failed.' });
+  } catch (err) {
+    res.status(500).json({ error: 'System reset failed' });
   }
 });
 
@@ -405,7 +729,7 @@ app.get('/api/scrape/:jobId', requireAuth, async (req, res) => {
 
 // ===================== EXTENSION API =====================
 
-app.get('/api/extension/pending-tasks', async (req, res) => {
+app.get('/api/extension/pending-tasks', requireExtAuth, async (req, res) => {
   try {
     // 1. Check Legacy Outreach Log (Single sends)
     const { data: legacy, error: err1 } = await supabase
@@ -449,7 +773,7 @@ app.get('/api/extension/pending-tasks', async (req, res) => {
 });
 
 // Update status from extension for both types
-app.post('/api/extension/update-status', async (req, res) => {
+app.post('/api/extension/update-status', requireExtAuth, async (req, res) => {
   const { id, type, status } = req.body;
   try {
     if (type === 'sequence') {
@@ -463,7 +787,7 @@ app.post('/api/extension/update-status', async (req, res) => {
   }
 });
 
-app.post('/api/extension/log-reply', async (req, res) => {
+app.post('/api/extension/log-reply', requireExtAuth, async (req, res) => {
   const { phone } = req.body;
   if (!phone) return res.status(400).json({ error: 'Phone required' });
   
@@ -510,7 +834,7 @@ app.post('/api/extension/log-reply', async (req, res) => {
   }
 });
 
-app.post('/api/extension/update-status', async (req, res) => {
+app.post('/api/extension/update-status', requireExtAuth, async (req, res) => {
   const { log_id, status } = req.body;
   try {
     const { error } = await supabase.from('outreach_log').update({ status }).eq('id', log_id);
@@ -524,6 +848,7 @@ app.post('/api/extension/update-status', async (req, res) => {
 // ===================== AUDIT API (Supabase) =====================
 
 // POST /api/audit — Run a website audit (public — no auth needed)
+// R5: Now auto-captures leads into CRM pipeline
 app.post('/api/audit', async (req, res) => {
   const { url, business_name, contact_name, contact_email, contact_phone } = req.body;
 
@@ -557,6 +882,44 @@ app.post('/api/audit', async (req, res) => {
     }).select('id').single();
 
     if (error) throw error;
+
+    // R5: Auto-capture lead into CRM pipeline
+    if (contact_name && contact_phone) {
+      try {
+        // Check if lead already exists by phone
+        const { data: existing } = await supabase
+          .from('pipeline_leads')
+          .select('id')
+          .eq('phone', contact_phone)
+          .limit(1);
+        
+        if (!existing || existing.length === 0) {
+          const { data: newLead } = await supabase.from('pipeline_leads').insert({
+            business_name: business_name || url,
+            contact_name,
+            email: contact_email || '',
+            phone: contact_phone,
+            website: url,
+            source: 'audit_tool',
+            stage: 'new',
+            priority: result.overallScore < 50 ? 'high' : 'medium',
+            notes: `Audit Score: ${result.overallScore}/100 (Grade: ${result.grade}) | ${result.summary.critical} critical issues`
+          }).select('id').single();
+
+          if (newLead) {
+            await supabase.from('activities').insert({
+              lead_id: newLead.id,
+              type: 'created',
+              title: 'Lead captured from Website Audit',
+              description: `Scored ${result.overallScore}/100. ${result.summary.critical} critical, ${result.summary.warnings} warnings.`
+            });
+            log.info('R5: Lead auto-captured from audit', { phone: contact_phone, score: result.overallScore });
+          }
+        }
+      } catch (leadErr) {
+        log.warn('R5: Failed to auto-capture audit lead', { error: leadErr.message });
+      }
+    }
 
     res.json({ ...result, auditId: auditRow.id });
   } catch (error) {
@@ -943,12 +1306,10 @@ app.get('/api/email/logs', requireAuth, async (req, res) => {
   }
 });
 
-// ===================== SEQUENCE ENGINE API (Phase 8) =====================
-
-// GET /api/sequences/campaigns - List all sequences
+// ===================// GET /api/sequences/campaigns - List active campaigns
 app.get('/api/sequences/campaigns', requireAuth, async (req, res) => {
   try {
-    const { data, error } = await supabase.from('campaigns').select('*').order('created_at', { ascending: false });
+    const { data, error } = await supabase.from('campaigns').select('*').eq('agency_id', req.user.agencyId).order('created_at', { ascending: false });
     if (error) throw error;
     res.json(data);
   } catch (err) {
@@ -956,7 +1317,84 @@ app.get('/api/sequences/campaigns', requireAuth, async (req, res) => {
   }
 });
 
-// POST /api/sequences/campaigns - Create a new sequence
+// DELETE /api/sequences/campaigns/:id
+app.delete('/api/sequences/campaigns/:id', requireAuth, async (req, res) => {
+  try {
+    const { error } = await supabase.from('campaigns').delete().eq('id', req.params.id);
+    if (error) {
+      console.error('Sequence delete error:', error);
+      return res.status(500).json({ error: error.message || 'Failed to delete sequence' });
+    }
+    res.json({ success: true, message: 'Sequence deleted' });
+  } catch (err) {
+    res.status(500).json({ error: 'System error during deletion' });
+  }
+});
+
+// POST /api/intelligence/enrich/:id
+app.post('/api/intelligence/enrich/:id', requireAuth, async (req, res) => {
+  const { id } = req.params; // This will be treated as the business_id (lead_id)
+  try {
+    // 1. Try to fetch existing or upsert a blank one if missing
+    // We search by lead_id (business_id) because that's the common reference
+    const { data: lead } = await supabase.from('businesses').select('id, place_name, website, search_city, industry').eq('id', id).single();
+    if (!lead) return res.status(404).json({ error: 'Business not found' });
+
+    let { data: enrichment, error: fetchErr } = await supabase
+      .from('website_enrichment')
+      .select('*')
+      .eq('lead_id', id)
+      .maybeSingle();
+
+    if (!enrichment) {
+      // Create a blank row if it doesn't exist yet
+      const { data: newRow, error: createErr } = await supabase.from('website_enrichment').insert({ lead_id: id, agency_id: req.user.agencyId }).select().single();
+      if (createErr) throw createErr;
+      enrichment = newRow;
+    }
+
+    // 2. Prepare enrichment prompt
+    const prompt = `Analyze this business details and provide a professional, one-sentence "human summary" of their likely pain points or digital presence, and a conversational "first-line icebreaker" I can use in an email/whatsapp.
+    
+    Business: ${lead.place_name}
+    City: ${lead.search_city}
+    Industry: ${lead.industry}
+    Website: ${lead.website}
+    CMS: ${enrichment.cms_stack || 'Unknown'}
+    Pixels: ${enrichment.has_fb_pixel ? 'Yes' : 'No'}
+    
+    Return ONLY a JSON object with: "ai_human_summary" (string) and "ai_first_line" (string).`;
+
+    const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+    });
+
+    const geminiData = await geminiRes.json();
+    const rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
+    const cleanedJson = rawText.replace(/```[a-z]*\n/g, '').replace(/```/g, '').trim();
+    const aiData = JSON.parse(cleanedJson);
+
+    const { data: updated, error: upErr } = await supabase
+      .from('website_enrichment')
+      .update({ 
+        ai_human_summary: aiData.ai_human_summary, 
+        ai_first_line: aiData.ai_first_line 
+      })
+      .eq('lead_id', id)
+      .select('*, businesses:businesses!inner(place_name, website, industry, search_city)')
+      .single();
+
+    if (upErr) throw upErr;
+    res.json({ success: true, updated });
+  } catch (err) {
+    console.error('Enrichment failed:', err);
+    res.status(500).json({ error: 'AI Enrichment failed' });
+  }
+});
+
+// POST /api/sequences/campaigns - Create a new sequence// POST /api/sequences/campaigns - Create a new sequence
 app.post('/api/sequences/campaigns', requireAuth, async (req, res) => {
   try {
     const { name, industry, description } = req.body;
@@ -1001,15 +1439,32 @@ app.post('/api/sequences/enroll', requireAuth, async (req, res) => {
   try {
     const { campaign_id, lead_id } = req.body;
     
+    // 1. Fetch lead from the CRM pipeline
+    const { data: pipelineLead } = await supabase.from('pipeline_leads').select('*').eq('id', lead_id).single();
+    if (!pipelineLead) return res.status(404).json({ error: 'Lead not found in CRM' });
+
+    // 2. Force Sync into `businesses` table to satisfy Foreign Key constraints for the AI engine
+    await supabase.from('businesses').upsert({
+      id: lead_id,
+      place_name: pipelineLead.business_name || 'Business',
+      phone: pipelineLead.phone || null,
+      website: pipelineLead.website || null
+    }, { onConflict: 'id' });
+    
     // Check if already enrolled
     const { data: existing } = await supabase.from('campaign_leads').select('id').eq('campaign_id', campaign_id).eq('lead_id', lead_id).single();
     if (existing) return res.status(400).json({ error: 'Lead already enrolled in this campaign' });
+
+    // F7: A/B variant assignment — alternate per enrollment
+    const { count: enrollCount } = await supabase.from('campaign_leads').select('id', { count: 'exact', head: true }).eq('campaign_id', campaign_id);
+    const variant = (enrollCount || 0) % 2 === 0 ? 'A' : 'B';
 
     const { data, error } = await supabase.from('campaign_leads').insert([{ 
       campaign_id, 
       lead_id, 
       status: 'active', 
-      current_step: 0 
+      current_step: 0,
+      variant
     }]).select().single();
     
     if (error) throw error;
@@ -1067,8 +1522,159 @@ app.get('/api/wa/pending', async (req, res) => {
   }
 });
 
+// F3: GET /api/sequences/performance — Outreach performance dashboard data
+app.get('/api/sequences/performance', requireAuth, async (req, res) => {
+  try {
+    // 1. Outreach stats by status
+    const { data: allOutreach } = await supabase.from('pending_outreach').select('status, channel, created_at, campaign_id');
+    const outreach = allOutreach || [];
+    
+    const totalSent = outreach.filter(o => o.status === 'sent').length;
+    const totalPending = outreach.filter(o => o.status === 'pending').length;
+    const totalFailed = outreach.filter(o => o.status === 'failed').length;
+
+    // 2. Campaign enrollment stats
+    const { data: enrollments } = await supabase.from('campaign_leads').select('status, campaign_id, current_step');
+    const enroll = enrollments || [];
+    const activeEnrollments = enroll.filter(e => e.status === 'active').length;
+    const repliedEnrollments = enroll.filter(e => e.status === 'replied').length;
+    const completedEnrollments = enroll.filter(e => e.status === 'completed').length;
+    const replyRate = enroll.length > 0 ? ((repliedEnrollments / enroll.length) * 100).toFixed(1) : 0;
+
+    // 3. Daily send volume (last 7 days)
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+    const recentSends = outreach.filter(o => o.status === 'sent' && o.created_at >= sevenDaysAgo);
+    const dailyVolume = {};
+    recentSends.forEach(o => {
+      const day = new Date(o.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+      dailyVolume[day] = (dailyVolume[day] || 0) + 1;
+    });
+
+    // 4. Campaign breakdown
+    const { data: campaigns } = await supabase.from('campaigns').select('id, name');
+    const campaignMap = {};
+    (campaigns || []).forEach(c => { campaignMap[c.id] = c.name; });
+    
+    const campaignStats = {};
+    enroll.forEach(e => {
+      const name = campaignMap[e.campaign_id] || 'Unknown';
+      if (!campaignStats[name]) campaignStats[name] = { active: 0, replied: 0, completed: 0, total: 0 };
+      campaignStats[name].total++;
+      campaignStats[name][e.status] = (campaignStats[name][e.status] || 0) + 1;
+    });
+
+    // 5. Rewrite failures (AI health)
+    const { data: failures } = await supabase.from('rewrite_failures').select('reason, created_at').order('created_at', { ascending: false }).limit(10);
+
+    // Log AI token usage (S5)
+    if (req.user && req.user.agencyId) {
+       await supabase.from('usage_events').insert({
+         agency_id: req.user.agencyId,
+         event_type: 'ai_rewrite',
+         quantity: 1
+       });
+    }
+
+    res.json({
+      overview: {
+        total_sent: totalSent,
+        total_pending: totalPending,
+        total_failed: totalFailed,
+        active_sequences: activeEnrollments,
+        replied: repliedEnrollments,
+        completed: completedEnrollments,
+        reply_rate: parseFloat(replyRate)
+      },
+      dailyVolume: Object.entries(dailyVolume).map(([day, count]) => ({ day, count })),
+      campaignBreakdown: Object.entries(campaignStats).map(([name, stats]) => ({ name, ...stats })),
+      recentFailures: failures || []
+    });
+  } catch (err) {
+    log.error('Performance stats error', { error: err.message });
+    res.status(500).json({ error: 'Failed to fetch performance data' });
+  }
+});
+
+// R2: GET /api/wa/templates — Fetch templates from database
+// Self-learning: auto-generates templates for new industries via Gemini
+app.get('/api/wa/templates', requireAuth, async (req, res) => {
+  try {
+    const { industry } = req.query;
+    let query = supabase.from('wa_templates').select('*').eq('is_active', true);
+    if (industry) {
+      query = query.or(`industry.eq.${industry},industry.eq.general`);
+    }
+    const { data, error } = await query.order('created_at', { ascending: false });
+    if (error) throw error;
+
+    // Self-learning: if industry requested but no industry-specific templates exist, generate them
+    if (industry && data && !data.some(t => t.industry === industry.toLowerCase())) {
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (apiKey) {
+        try {
+          log.info(`Auto-generating WA templates for new industry: "${industry}"`);
+          const genRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: [{ text: `Generate exactly 2 WhatsApp outreach message templates for a digital marketing agency reaching out to "${industry}" businesses in India. 
+Format: Return ONLY a JSON array with 2 objects, each having "name" (string) and "body" (string) fields.
+Template 1: Cold outreach intro. Template 2: Follow-up message.
+Use {{business_name}} and {{city}} as placeholders. Keep messages casual, under 50 words each, and end with "— GrowthAI".
+Output ONLY the JSON array, no markdown or explanation.` }] }] })
+          });
+          
+          if (genRes.ok) {
+            const genData = await genRes.json();
+            const rawText = genData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+            // Parse JSON from Gemini response (strip markdown fences if present)
+            const cleanJson = rawText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+            const templates = JSON.parse(cleanJson);
+            
+            if (Array.isArray(templates)) {
+              const toInsert = templates.map((t, i) => ({
+                name: t.name || `${industry} Template ${i + 1}`,
+                body: t.body,
+                industry: industry.toLowerCase(),
+                category: i === 0 ? 'outreach' : 'followup',
+                is_active: true
+              }));
+              
+              const { data: newTemplates } = await supabase.from('wa_templates').insert(toInsert).select('*');
+              if (newTemplates) {
+                log.info(`✅ Auto-generated ${newTemplates.length} templates for "${industry}"`);
+                data.push(...newTemplates);
+              }
+            }
+          }
+        } catch (genErr) {
+          log.warn('Template auto-generation failed', { error: genErr.message });
+        }
+      }
+    }
+
+    res.json(data || []);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch templates' });
+  }
+});
+
+// R2: POST /api/wa/templates — Create a new template
+app.post('/api/wa/templates', requireAuth, async (req, res) => {
+  const { name, body, industry, category } = req.body;
+  if (!name || !body) return res.status(400).json({ error: 'Name and body are required' });
+  try {
+    const { data, error } = await supabase.from('wa_templates').insert({
+      name, body, industry: industry || 'general', category: category || 'outreach'
+    }).select('*').single();
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to create template' });
+  }
+});
+
 // POST /api/wa/mark-sent - Resolve task from Extension
-app.post('/api/wa/mark-sent', async (req, res) => {
+app.post('/api/wa/mark-sent', requireExtAuth, async (req, res) => {
   const { id } = req.body;
   try {
     const { error } = await supabase.from('pending_outreach').update({ status: 'sent' }).eq('id', id);
@@ -1181,6 +1787,25 @@ app.get('/api/crm/analytics', requireAuth, async (req, res) => {
     res.json(analytics);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch analytics: ' + err.message });
+  }
+});
+
+// F10: GET /api/crm/export — CSV export of CRM pipeline
+app.get('/api/crm/export', requireAuth, async (req, res) => {
+  try {
+    const { data, error } = await supabase.from('pipeline_leads').select('*').order('updated_at', { ascending: false });
+    if (error) throw error;
+    
+    const header = 'Business Name,Contact Name,Email,Phone,Website,Industry,Stage,Priority,Lead Score,Deal Value,Source,Notes,Created,Updated\n';
+    const rows = (data || []).map(l => 
+      [l.business_name, l.contact_name, l.email, l.phone, l.website, l.industry, l.stage, l.priority, l.lead_score, l.deal_value, l.source, `"${(l.notes || '').replace(/"/g, '""')}"`, l.created_at, l.updated_at].join(',')
+    ).join('\n');
+    
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename=crm_pipeline_export.csv');
+    res.send(header + rows);
+  } catch (err) {
+    res.status(500).json({ error: 'Export failed' });
   }
 });
 
@@ -1304,9 +1929,17 @@ app.get('/api/wa/logs', async (req, res) => {
   }
 });
 
-// ===================== HEALTH / CRON ENDPOINT =====================
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+// ===================== HEALTH / CRON =====================
+
+// X10: Health check with Supabase connectivity test
+app.get('/health', async (req, res) => {
+  try {
+    const { error } = await supabase.from('businesses').select('id').limit(1);
+    if (error) throw error;
+    res.json({ status: 'ok', db: 'connected', timestamp: new Date().toISOString() });
+  } catch (e) {
+    res.status(503).json({ status: 'unhealthy', db: 'disconnected', error: e.message });
+  }
 });
 
 const PORT = process.env.PORT || 3001;
@@ -1316,18 +1949,20 @@ app.listen(PORT, async () => {
   // Auto-load SMTP config from database on startup
   try {
     await loadSmtpConfig();
-    
-    // Start the WhatsApp Sequence Engine Check (Runs every 1 hour)
-    setInterval(() => {
-      processSequences();
-    }, 1000 * 60 * 60);
-
-    // Initial check on boot
-    processSequences();
-    
   } catch (err) {
-    console.warn('⚠️ Initialization skipped:', err.message);
+    console.warn('⚠️ SMTP config load skipped:', err.message);
   }
+
+  // X1: node-cron — run sequence engine at 9am and 3pm daily (IST)
+  cron.schedule('0 9,15 * * *', () => {
+    console.log('[CRON] Running processSequences() — scheduled daily run');
+    processSequences();
+  }, { timezone: 'Asia/Kolkata' });
+
+  // Also run on boot for immediate processing
+  processSequences();
+  
+  console.log('[CRON] ✅ Sequence engine scheduled for 9:00 AM and 3:00 PM IST daily');
 });
 
 // JSON 404 Handler (Phase 9 Polish)

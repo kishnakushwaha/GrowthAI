@@ -228,6 +228,7 @@ async def enrich_lead(context, lead_id, data):
     """
     website = data.get('website')
     place_name = data.get('place_name')
+    agency_id = data.get('agency_id')
     
     # Generate AI Icebreaker regardless of website
     ai_first_line = await generate_ai_icebreaker(place_name, data.get('industry', ''), data.get('rating', ''), data.get('reviews', '0'))
@@ -240,7 +241,8 @@ async def enrich_lead(context, lead_id, data):
         "has_google_ads": False,
         "seo_missing_h1": True,
         "seo_missing_meta_desc": True,
-        "cms_stack": "None"
+        "cms_stack": "None",
+        "agency_id": agency_id
     }
 
     if website and website != 'N/A' and website.strip():
@@ -295,13 +297,44 @@ async def enrich_lead(context, lead_id, data):
         
         # Phase 6 Bonus: Update the main business lead_score based on deep SEO findings
         added_penalty = enrichment_data.get("seo_score", 0) * 3
+        update_fields = {}
         if added_penalty > 0:
             res = supabase.table('businesses').select('lead_score').eq('id', lead_id).execute()
             if res.data:
                 curr_score = res.data[0].get('lead_score') or 0
                 new_score = min(100, curr_score + added_penalty)
-                supabase.table('businesses').update({'lead_score': new_score}).eq('id', lead_id).execute()
+                update_fields['lead_score'] = new_score
 
-        print(f"✅ Enriched & Classified Lead {lead_id} | Opp: {enrichment_data.get('opportunity_type')} | Speed: {enrichment_data.get('pagespeed_mobile')}")
+        # F1: Save owner_name to businesses table for easy access
+        owner = enrichment_data.get('owner_name')
+        if owner and owner != 'Unknown':
+            update_fields['contact_name'] = owner
+        
+        if update_fields:
+            supabase.table('businesses').update(update_fields).eq('id', lead_id).execute()
+
+        # F1: Insert into contacts table for structured person-level data
+        if owner and owner != 'Unknown':
+            try:
+                # Extract social links from signals if available
+                linkedin_url = None
+                instagram_url = None
+                if website and website != 'N/A':
+                    # These were detected during scraping
+                    pass  # URLs are detected but not extracted individually yet
+                
+                supabase.table('contacts').upsert({
+                    'business_id': lead_id,
+                    'name': owner,
+                    'role': 'Owner/Founder',
+                    'email': enrichment_data.get('extracted_email'),
+                    'source': 'website_scrape',
+                    'agency_id': agency_id
+                }, on_conflict='business_id,name').execute()
+                print(f"  👤 F1: Contact saved — {owner} ({place_name})")
+            except Exception as ce:
+                print(f"  ⚠️ Contact save failed: {ce}")
+
+        print(f"✅ Enriched & Classified Lead {lead_id} | Opp: {enrichment_data.get('opportunity_type')} | Contact: {owner or 'Unknown'}")
     except Exception as e:
         print(f"⚠️ Failed to save enrichment to Supabase: {e}")

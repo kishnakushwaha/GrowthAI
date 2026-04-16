@@ -1,4 +1,4 @@
-const MODE = 'production';
+const MODE = 'local';
 
 const API_URL = MODE === 'local' 
   ? 'http://localhost:3001'

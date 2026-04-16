@@ -507,10 +507,11 @@ async function processSequences() {
   }
 }
 
-// Boot the API
+// Boot the API (A4: Secured — localhost only. Change to '0.0.0.0' to expose externally)
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 WhatsApp Service v1.6 listening on port ${PORT}`);
+app.listen(PORT, '127.0.0.1', () => {
+  console.log(`🔒 WhatsApp Service v1.7 [BACKUP MODE] listening on localhost:${PORT}`);
+  console.log(`   ↳ To activate: change bind to '0.0.0.0' or remove localhost restriction`);
   startWhatsApp();
   // Run sequence processor every 5 minutes
   setInterval(processSequences, 5 * 60 * 1000);

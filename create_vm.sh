@@ -16,10 +16,11 @@ apt-get install -y nodejs git chromium libgbm-dev
 mkdir -p /opt/app
 cd /opt/app
 git clone https://github.com/kishnakushwaha/GrowthAI.git
-cd GrowthAI/backend/wa-service
+# IMPORTANT: Set these variables before running or pass them as --metadata during VM creation
+# Replace placeholders with your actual Supabase credentials
 cat <<EOT >> .env
-SUPABASE_URL=https://nznlkyudrajyezifjqsh.supabase.co
-SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im56bmxreXVkcmFqeWV6aWZqcXNoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUxNzQ5NDUsImV4cCI6MjA5MDc1MDk0NX0.zDHQX_QmZzdedUVwTAIy3tAU-S2JJ8_jFpaTzizJklU
+SUPABASE_URL=\${SUPABASE_URL:-"your-supabase-url"}
+SUPABASE_KEY=\${SUPABASE_KEY:-"your-supabase-key"}
 PORT=80
 EOT
 export PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true

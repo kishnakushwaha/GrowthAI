@@ -197,6 +197,18 @@ const Leads = () => {
     return () => clearInterval(interval);
   }, [activeJobId]);
 
+  const resetScraper = async () => {
+    try {
+      const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
+      const res = await fetch(`${API}/api/scrape/reset`, { method: 'POST', headers });
+      if (res.ok) {
+        setScrapeLog(prev => [...prev, '✅ System Reset Successful. You can now start a new scrape.']);
+      }
+    } catch (err) {
+      setScrapeLog(prev => [...prev, '❌ Reset failed: ' + err.message]);
+    }
+  };
+
   const startScrape = async () => {
     if (!scrapeQuery.trim()) return;
     setScraping(true);
@@ -208,11 +220,22 @@ const Leads = () => {
         method: 'POST', headers,
         body: JSON.stringify({ query: scrapeQuery, count: scrapeCount })
       });
-      if (!res.ok) {
-        const errText = await res.text();
-        throw new Error(`Server returned ${res.status}: ${errText}`);
-      }
+      
       const data = await res.json();
+
+      if (res.status === 429) {
+        setScrapeLog([
+          `⚠️ Conflict: ${data.error}`,
+          'Try resetting the system if you think this is an error.'
+        ]);
+        setScraping(false);
+        return;
+      }
+
+      if (!res.ok) {
+        throw new Error(data.error || `Server returned ${res.status}`);
+      }
+      
       setActiveJobId(data.jobId);
     } catch (err) {
       setScrapeLog([`Failed to start: ${err.message}`]);
@@ -339,11 +362,23 @@ const Leads = () => {
           </div>
           {scrapeLog.length > 0 && (
             <div className="scrape-log">
-              {scrapeLog.map((line, i) => (
-                <div key={i} className={`log-line ${line.startsWith('ERROR') ? 'log-error' : line.startsWith('✅') ? 'log-success' : ''}`}>
-                  {line}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div style={{ flex: 1 }}>
+                  {scrapeLog.map((line, i) => (
+                    <div key={i} className={`log-line ${line.includes('status 429') || line.includes('❌') ? 'log-error' : line.startsWith('✅') ? 'log-success' : ''}`}>
+                      {line}
+                    </div>
+                  ))}
                 </div>
-              ))}
+                {!scraping && scrapeLog.some(l => l.includes('Conflict')) && (
+                  <button 
+                    onClick={resetScraper}
+                    style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444', padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 'bold', border: '1px solid rgba(239, 68, 68, 0.3)', cursor: 'pointer', flexShrink: 0 }}
+                  >
+                    Reset System
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -479,7 +514,7 @@ const Leads = () => {
             </thead>
             <tbody>
               {leads.map((lead) => (
-                <tr key={lead.id} className={lead.is_hot_lead ? 'hot-row' : ''}>
+                <tr key={lead.id} className={lead.lead_score >= 60 ? 'hot-row' : ''}>
                   <td className="name-cell">
                     <span className="lead-name">{lead.place_name}</span>
                     <span className="lead-industry text-muted">{lead.industry}</span>

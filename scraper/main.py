@@ -6,8 +6,8 @@ from playwright.async_api import async_playwright
 from database import init_db, save_lead, export_to_csv, supabase
 from deep_scraper import enrich_lead
 
-async def scrape_google_maps(query, item_limit=20):
-    print(f"🚀 Starting scraper for: '{query}'")
+async def scrape_google_maps(query, item_limit=20, agency_id=None):
+    print(f"🚀 Starting scraper for: '{query}' [Agency: {agency_id}]")
     
     init_db()
 
@@ -208,6 +208,7 @@ async def scrape_google_maps(query, item_limit=20):
                         print(f"⏭️ Skipped Incomplete Lead: {name} (No Address or Rating)")
                         continue
 
+                    
                     lead_data = {
                         "place_name": name,
                         "industry": query,
@@ -219,10 +220,11 @@ async def scrape_google_maps(query, item_limit=20):
                         "maps_url": maps_url,
                         "rank_position": rank_index,
                         "search_query": query,
-                        "search_city": search_city
+                        "search_city": search_city,
+                        "agency_id": agency_id
                     }
                     
-                    lead_id = save_lead(lead_data)
+                    lead_id = save_lead(lead_data, agency_id)
                     if lead_id:
                         print(f"✅ {name} | ⭐ {rating} ({reviews} reviews) | 📞 {phone} | 🌐 {'Yes' if website != 'N/A' else 'No'}")
                         extracted_count += 1
@@ -246,8 +248,9 @@ async def scrape_google_maps(query, item_limit=20):
             except:
                 break
 
-        from compute_gaps import compute_competitor_gaps
-        compute_competitor_gaps(query, search_city)
+        # F5: Compute competitor benchmarks after scrape batch
+        from database import compute_competitor_benchmarks
+        compute_competitor_benchmarks(query)
         print(f"\n🎉 Finished scraping! Extracted {extracted_count} leads.")
         await browser.close()
         
@@ -256,5 +259,6 @@ async def scrape_google_maps(query, item_limit=20):
 if __name__ == "__main__":
     query = sys.argv[1] if len(sys.argv) > 1 else "Dentist in Delhi"
     count = int(sys.argv[2]) if len(sys.argv) > 2 else 10
-    asyncio.run(scrape_google_maps(query, item_limit=count))
+    agency_id = sys.argv[3] if len(sys.argv) > 3 else "00000000-0000-0000-0000-000000000001"
+    asyncio.run(scrape_google_maps(query, item_limit=count, agency_id=agency_id))
 

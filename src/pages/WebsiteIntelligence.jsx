@@ -13,6 +13,7 @@ const WebsiteIntelligence = () => {
   const [enrollingLead, setEnrollingLead] = useState(null); // Lead being enrolled
   const [selectedCampaign, setSelectedCampaign] = useState('');
   const [enrolling, setEnrolling] = useState(false);
+  const [refreshingId, setRefreshingId] = useState(null);
 
   useEffect(() => {
     fetchIntelligence();
@@ -35,7 +36,6 @@ const WebsiteIntelligence = () => {
     setLoading(true);
     try {
       const headers = { 'Authorization': `Bearer ${token}` };
-      // Reuse the signals endpoint but filter natively in client
       const res = await fetch(`${API}/api/signals`, { headers });
       const data = await res.json();
       setLeads(data.signals || []);
@@ -43,6 +43,28 @@ const WebsiteIntelligence = () => {
       console.error('Failed to fetch intelligence', err);
     }
     setLoading(false);
+  };
+
+  const handleRefreshIntel = async (leadId) => {
+    // leadId should be the business_id
+    const targetId = leadId.businesses?.id || leadId;
+    setRefreshingId(targetId);
+    try {
+      const res = await fetch(`${API}/api/intelligence/enrich/${targetId}`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setLeads(prev => prev.map(l => (l.businesses?.id === targetId || l.lead_id === targetId) ? data.updated : l));
+      } else {
+        alert(data.error || 'Enrichment failed');
+      }
+    } catch (err) { 
+      console.error(err); 
+    } finally {
+      setRefreshingId(null);
+    }
   };
 
   const enrollInCampaign = async () => {
@@ -80,7 +102,6 @@ const WebsiteIntelligence = () => {
     let Icon = Globe;
     let label = 'View Website';
 
-    // Legacy Lucide fallback: using Globe for all as social icons are missing in v1.7.0
     if (lowerUrl.includes('instagram.com')) { label = 'Instagram'; }
     else if (lowerUrl.includes('facebook.com')) { label = 'Facebook'; }
     else if (lowerUrl.includes('youtube.com')) { label = 'YouTube'; }
@@ -93,7 +114,6 @@ const WebsiteIntelligence = () => {
     navigator.clipboard.writeText(text);
   };
 
-  // Derive counts
   const counts = {
     ads_no_retargeting: leads.filter(l => l.opportunity_type === 'ads_no_retargeting').length,
     no_tracking: leads.filter(l => l.opportunity_type === 'no_tracking').length,
@@ -115,9 +135,7 @@ const WebsiteIntelligence = () => {
         </div>
       </div>
 
-      {/* SEGMENT TABS */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '15px', marginBottom: '20px' }}>
-        
         <div className={`admin-card metric-card ${activeTab === 'ads_no_retargeting' ? 'active-segment' : ''}`} 
              style={{ cursor: 'pointer', border: activeTab === 'ads_no_retargeting' ? '2px solid #facc15' : '' }}
              onClick={() => setActiveTab('ads_no_retargeting')}>
@@ -193,8 +211,9 @@ const WebsiteIntelligence = () => {
                   <th>Pixel & Ads</th>
                   <th>SEO Penalty</th>
                   <th>Speed</th>
-                  <th>Pitch Angle</th>
+                  <th>AI Human Summary</th>
                   <th>AI Icebreaker</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -208,9 +227,7 @@ const WebsiteIntelligence = () => {
                         if (!linkData) return null;
                         const href = lead.businesses.website.startsWith('http') ? lead.businesses.website : `https://${lead.businesses.website}`;
                         return (
-                          <a href={href} 
-                             target="_blank" rel="noreferrer" 
-                             style={{ fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '6px', color: 'var(--primary)', textDecoration: 'none' }}>
+                          <a href={href} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', display: 'inline-flex', alignItems: 'center', gap: '4px', marginTop: '6px', color: 'var(--primary)', textDecoration: 'none' }}>
                             <linkData.Icon size={12} /> {linkData.label}
                           </a>
                         );
@@ -219,33 +236,17 @@ const WebsiteIntelligence = () => {
                     
                     <td>
                       <span className={`hot-badge`} style={{ 
-                        background: lead.cms_stack === 'WordPress' ? 'rgba(37, 99, 235, 0.2)' : 
-                                   lead.cms_stack === 'Shopify' ? 'rgba(34, 197, 94, 0.2)' : 
-                                   lead.cms_stack === 'Wix' ? 'rgba(156, 163, 175, 0.2)' : 'rgba(255,255,255,0.05)',
-                        color: lead.cms_stack === 'WordPress' ? '#60a5fa' : 
-                               lead.cms_stack === 'Shopify' ? '#4ade80' : 
-                               lead.cms_stack === 'Wix' ? '#d1d5db' : '#9ca3af',
+                        background: lead.cms_stack === 'WordPress' ? 'rgba(37, 99, 235, 0.2)' : lead.cms_stack === 'Shopify' ? 'rgba(34, 197, 94, 0.2)' : lead.cms_stack === 'Wix' ? 'rgba(156, 163, 175, 0.2)' : 'rgba(255,255,255,0.05)',
+                        color: lead.cms_stack === 'WordPress' ? '#60a5fa' : lead.cms_stack === 'Shopify' ? '#4ade80' : lead.cms_stack === 'Wix' ? '#d1d5db' : '#9ca3af',
                       }}>
-                        <Code size={12} /> {lead.cms_stack || 'Custom / Unknown'}
+                        <Code size={12} /> {lead.cms_stack || 'Custom'}
                       </span>
                     </td>
                     
                     <td>
                       <div style={{ display: 'flex', gap: '8px', flexDirection: 'column' }}>
-                        {lead.has_fb_pixel ? (
-                          <span style={{ fontSize: '0.8rem', color: '#60a5fa', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <Target size={14} /> Meta / FB Pixel Found
-                          </span>
-                        ) : (
-                          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>No Meta Pixel</span>
-                        )}
-                        {lead.has_google_ads ? (
-                          <span style={{ fontSize: '0.8rem', color: '#facc15', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <Monitor size={14} /> G-Tag / Ads Found
-                          </span>
-                        ) : (
-                          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>No Google G-Tag</span>
-                        )}
+                        {lead.has_fb_pixel ? <span style={{ fontSize: '0.8rem', color: '#60a5fa', display: 'flex', alignItems: 'center', gap: '4px' }}><Target size={14} /> Meta Pixel Found</span> : <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>No Meta Pixel</span>}
+                        {lead.has_google_ads ? <span style={{ fontSize: '0.8rem', color: '#facc15', display: 'flex', alignItems: 'center', gap: '4px' }}><Monitor size={14} /> G-Tag Found</span> : <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>No Google G-Tag</span>}
                       </div>
                     </td>
 
@@ -264,57 +265,48 @@ const WebsiteIntelligence = () => {
                            background: lead.pagespeed_mobile < 50 ? 'rgba(239, 68, 68, 0.2)' : lead.pagespeed_mobile < 90 ? 'rgba(250, 204, 21, 0.2)' : 'rgba(34, 197, 94, 0.2)',
                            color: lead.pagespeed_mobile < 50 ? '#ef4444' : lead.pagespeed_mobile < 90 ? '#facc15' : '#4ade80'
                         }}>
-                          <Zap size={12}/> {lead.pagespeed_mobile}/100 Mobile
+                          <Zap size={12}/> {lead.pagespeed_mobile}%
                         </span>
-                      ) : (
-                         <span className="text-muted" style={{ fontSize: '0.8rem' }}>Untested</span>
-                      )}
+                      ) : <span className="text-muted" style={{ fontSize: '0.8rem' }}>Untested</span>}
                     </td>
 
-                    <td style={{ width: '25%', whiteSpace: 'normal', fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
-                      {lead.pitch_angle || '—'}
+                    <td style={{ width: '25%', whiteSpace: 'normal', fontSize: '0.85rem', color: 'var(--text-main)', lineHeight: '1.4' }}>
+                      {lead.ai_human_summary ? lead.ai_human_summary : <span className="text-muted italic">Click Analyze to generate...</span>}
                     </td>
                     
-                    <td style={{ width: '40%', whiteSpace: 'normal', lineHeight: '1.4' }}>
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                        {lead.ai_human_summary ? (
-                          <div style={{ background: 'rgba(0,0,0,0.2)', padding: '10px', borderRadius: '8px', borderLeft: '2px solid var(--primary)', fontSize: '0.8rem', color: 'rgba(255,255,255,0.9)' }}>
-                            {lead.ai_human_summary}
-                          </div>
-                        ) : (
-                          <div style={{ padding: '8px', borderRadius: '8px', borderLeft: '2px dashed rgba(255,255,255,0.1)', fontSize: '0.75rem', color: 'rgba(255,255,255,0.3)', fontStyle: 'italic' }}>
-                            [NLP Engine Upgrade Applied] Fresh Scrape Required to generate Human Summary.
-                          </div>
+                    <td style={{ width: '25%', whiteSpace: 'normal', lineHeight: '1.4' }}>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', background: 'rgba(255,255,255,0.03)', padding: '8px', borderRadius: '6px' }}>
+                        <span style={{ fontSize: '0.8rem', fontStyle: 'italic', display: 'block', flex: 1, color: lead.ai_first_line ? 'inherit' : 'rgba(255,255,255,0.3)' }}>
+                          {lead.ai_first_line ? `"${lead.ai_first_line}"` : "No Icebreaker available."}
+                        </span>
+                        {lead.ai_first_line && (
+                          <button onClick={() => copyToClipboard(lead.ai_first_line)} className="btn-icon" style={{ background: 'rgba(255,255,255,0.1)' }} title="Copy Icebreaker">
+                            <Copy size={12} />
+                          </button>
                         )}
-                        
-                        <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-start', background: 'rgba(255,255,255,0.03)', padding: '8px', borderRadius: '6px' }}>
-                          <span style={{ fontSize: '0.8rem', fontStyle: 'italic', display: 'block', flex: 1, color: lead.ai_first_line ? 'inherit' : 'rgba(255,255,255,0.3)' }}>
-                            {lead.ai_first_line ? `"${lead.ai_first_line}"` : "No Icebreaker available."}
-                          </span>
-                          <div style={{ display: 'flex', gap: '4px' }}>
-                            {lead.ai_first_line && (
-                              <button onClick={() => copyToClipboard(lead.ai_first_line)} className="btn-icon" style={{ background: 'rgba(255,255,255,0.1)' }} title="Copy Icebreaker">
-                                <Copy size={12} />
-                              </button>
-                            )}
-                            <a href={`#whatsapp?phone=${encodeURIComponent(lead.businesses?.phone || '')}&business=${encodeURIComponent(lead.businesses?.place_name || '')}&pitch=${encodeURIComponent(lead.ai_first_line || '')}&lead_id=${lead.id}`} 
-                                className="btn-icon" style={{ background: '#22c55e', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Send via WhatsApp">
-                              <MessageCircle size={12} />
-                            </a>
-                          </div>
-                        </div>
                       </div>
                     </td>
 
                     <td style={{ textAlign: 'center' }}>
-                      <button 
-                         className="btn-icon" 
-                         style={{ background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.3)' }}
-                         onClick={() => setEnrollingLead(lead)}
-                         title="Enroll in Sequence"
-                      >
-                         <PlusSquare size={18} />
-                      </button>
+                      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                        <button 
+                          className="btn-icon" 
+                          style={{ background: refreshingId === lead.businesses?.id ? 'var(--bg-surface)' : 'rgba(16, 185, 129, 0.15)', color: '#10B981', border: '1px solid rgba(16, 185, 129, 0.3)' }}
+                          onClick={() => handleRefreshIntel(lead.businesses?.id)}
+                          disabled={refreshingId === lead.businesses?.id}
+                          title="Generate AI Analysis"
+                        >
+                          {refreshingId === lead.businesses?.id ? <Loader2 size={16} className="spin" /> : <Zap size={16} />}
+                        </button>
+                        <button 
+                           className="btn-icon" 
+                           style={{ background: 'rgba(99, 102, 241, 0.2)', color: '#818cf8', border: '1px solid rgba(99, 102, 241, 0.3)' }}
+                           onClick={() => setEnrollingLead(lead)}
+                           title="Enroll in Sequence"
+                        >
+                           <PlusSquare size={16} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -324,61 +316,23 @@ const WebsiteIntelligence = () => {
         )}
       </div>
 
-      {/* ENROLLMENT MODAL */}
       {enrollingLead && (
-        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(5px)' }}>
+        <div className="modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(10px)' }}>
           <div className="admin-card glass-panel" style={{ width: '450px', padding: '2rem', position: 'relative' }}>
-            <button 
-              onClick={() => setEnrollingLead(null)} 
-              style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
-            >
-              <X size={24} />
-            </button>
-            <h2 style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1.5rem' }}>
-              <Play size={24} color="var(--primary)" /> Enroll in <span className="text-gradient">Sequence</span>
-            </h2>
-            <p className="text-muted" style={{ marginBottom: '1.5rem', fontSize: '0.9rem' }}>
-              Enrolling <strong>{enrollingLead.businesses?.place_name}</strong> into a multi-step automated outreach campaign.
-            </p>
-            
+            <button onClick={() => setEnrollingLead(null)} style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'none', border: 'none', color: 'var(--text-muted)' }}><X size={24} /></button>
+            <h2 style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1.5rem' }}><Play size={24} color="var(--primary)" /> Enroll Lead</h2>
+            <p className="text-muted" style={{ marginBottom: '1.5rem', fontSize: '0.9rem' }}>Enrolling <strong>{enrollingLead.businesses?.place_name}</strong> into automation.</p>
             <div style={{ marginBottom: '1.5rem' }}>
               <label style={{ display: 'block', marginBottom: '8px', color: 'var(--text-muted)', fontSize: '0.9rem' }}>Select Campaign</label>
-              <select 
-                className="scrape-input" 
-                style={{ width: '100%', padding: '10px' }}
-                value={selectedCampaign}
-                onChange={(e) => setSelectedCampaign(e.target.value)}
-              >
+              <select className="scrape-input" style={{ width: '100%', padding: '10px' }} value={selectedCampaign} onChange={(e) => setSelectedCampaign(e.target.value)}>
                 <option value="">-- Choose a Campaign --</option>
-                {campaigns.length > 0 ? campaigns.map(c => (
-                  <option key={c.id} value={c.id}>{c.name} ({c.industry || 'All Industries'})</option>
-                )) : (
-                  <option disabled>No active campaigns found. Create one in Admin.</option>
-                )}
+                {campaigns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
-
             <div style={{ display: 'flex', gap: '10px' }}>
-              <button 
-                className="btn-primary" 
-                style={{ flex: 1, padding: '12px' }}
-                disabled={!selectedCampaign || enrolling}
-                onClick={enrollInCampaign}
-              >
-                {enrolling ? 'Enrolling...' : 'Start Automation'}
-              </button>
-              <button 
-                className="btn-secondary" 
-                style={{ flex: 1, padding: '12px' }}
-                onClick={() => setEnrollingLead(null)}
-              >
-                Cancel
-              </button>
+              <button className="btn-primary" style={{ flex: 1, padding: '12px' }} disabled={!selectedCampaign || enrolling} onClick={enrollInCampaign}>{enrolling ? 'Enrolling...' : 'Start Automation'}</button>
+              <button className="btn-secondary" style={{ flex: 1, padding: '12px' }} onClick={() => setEnrollingLead(null)}>Cancel</button>
             </div>
-            
-            <p style={{ marginTop: '1.5rem', fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-              💡 Messages will be queued for the Chrome Extension to pick up.
-            </p>
           </div>
         </div>
       )}

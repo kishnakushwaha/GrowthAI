@@ -1,4 +1,4 @@
-import supabase from './supabaseClient.js';
+import supabase from '../supabaseClient.js';
 import fetch from 'node-fetch';
 import { v4 as uuidv4 } from 'uuid';
 import { rewriteWithAI } from './geminiHelper.js';
@@ -32,7 +32,7 @@ export async function processSequences() {
       .from('campaign_leads')
       .select(`
         *,
-        businesses ( id, place_name, phone, city ),
+        businesses ( id, place_name, phone, search_city ),
         campaigns ( id, name )
       `)
       .eq('status', 'active')
@@ -48,11 +48,18 @@ export async function processSequences() {
 
     for (const enrollment of enrollments) {
       // 2. Find the current step for this lead in their campaign
-      const { data: steps } = await supabase
+      // F7: A/B testing — select steps matching the enrollment's variant
+      const enrollVariant = enrollment.variant || 'A';
+      const { data: allSteps } = await supabase
         .from('sequence_steps')
         .select('*')
         .eq('campaign_id', enrollment.campaign_id)
         .order('day_offset', { ascending: true });
+
+      if (!allSteps || allSteps.length === 0) continue;
+
+      // F7: Filter steps by variant (if variant column exists), fallback to all steps
+      const steps = allSteps.filter(s => !s.variant || s.variant === enrollVariant || s.variant === 'A');
 
       if (!steps || steps.length === 0) continue;
 
@@ -69,12 +76,12 @@ export async function processSequences() {
       const biz = enrollment.businesses;
       let body = currentStep.template_body
         .replace(/{{business_name}}/g, biz.place_name || 'your business')
-        .replace(/{{city}}/g, biz.city || 'your city')
+        .replace(/{{city}}/g, biz.search_city || 'your city')
         .replace(/{{contact_name}}/g, biz.place_name?.split(' ')[0] || 'Team');
 
       // PHASE 9: Human-Fluid Automation (AI Rewrite)
       // Only rewrite if we have enough context about the business
-      const { data: fullBiz } = await supabase.from('business_intelligence').select('ai_human_summary').eq('business_id', biz.id).single();
+      const { data: fullBiz } = await supabase.from('business_intelligence').select('ai_human_summary').eq('business_id', biz.id).maybeSingle();
       
       const aiRewritten = await rewriteWithAI(body, { 
         place_name: biz.place_name, 
@@ -90,7 +97,7 @@ export async function processSequences() {
       if (currentStep.channel === 'email') {
         try {
           // Find if we have an email for this business
-          const { data: businessDetail } = await supabase.from('pipeline_leads').select('email').eq('business_name', biz.place_name).single();
+          const { data: businessDetail } = await supabase.from('pipeline_leads').select('email').eq('business_name', biz.place_name).maybeSingle();
           
           if (businessDetail?.email) {
             await sendEmail({
@@ -117,6 +124,7 @@ export async function processSequences() {
         step_id: currentStep.id,
         channel: currentStep.channel,
         message_body: body,
+        original_body: currentStep.template_body, // PHASE 11: Store original for preview
         status: currentStep.channel === 'email' ? 'sent' : 'pending',
         scheduled_for: now
       });
