@@ -1,0 +1,63 @@
+---
+import '../styles/global.css';
+
+interface Props {
+	title: string;
+}
+
+const { title } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en" class="dark">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width" />
+		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+		<meta name="generator" content={Astro.generator} />
+		<title>{title} | Lifetime Fitness Club</title>
+		<!-- Inter Font -->
+		<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+	</head>
+	<body class="bg-black text-gray-300 font-['Inter'] antialiased min-h-screen flex flex-col">
+		
+		<!-- Navigation -->
+		<nav class="sticky top-0 z-50 bg-black/50 backdrop-blur-md border-b border-white/10">
+			<div class="max-w-6xl mx-auto px-6 h-16 flex items-center justify-between">
+				<a href="/" class="text-white font-bold text-xl tracking-tight">Lifetime Fitness</a>
+				<div class="hidden md:flex gap-6 text-sm font-medium">
+					<a href="/about" class="hover:text-white transition-colors">About Us</a>
+					<a href="/#services" class="hover:text-white transition-colors">Services</a>
+					<a href="/contact" class="hover:text-white transition-colors">Contact</a>
+				</div>
+				<a href="/contact" class="text-sm font-medium bg-white text-black px-4 py-2 rounded-md hover:bg-gray-200 transition-colors">Join Now</a>
+			</div>
+		</nav>
+
+		<main class="flex-grow">
+			<slot />
+		</main>
+
+		<!-- Footer -->
+		<footer class="border-t border-white/10 mt-24 py-12">
+			<div class="max-w-6xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-8">
+				<div>
+					<h3 class="text-white font-bold mb-4">Lifetime Fitness Club</h3>
+					<p class="text-sm text-gray-500">Premium health and wellness experience.</p>
+				</div>
+				<div class="flex flex-col gap-2 text-sm text-gray-500">
+					<a href="/about" class="hover:text-white">About Us</a>
+					<a href="/contact" class="hover:text-white">Contact Us</a>
+				</div>
+				<div class="flex flex-col gap-2 text-sm text-gray-500">
+					<a href="/privacy-policy" class="hover:text-white">Privacy Policy</a>
+					<a href="/terms" class="hover:text-white">Terms & Conditions</a>
+				</div>
+			</div>
+			<div class="max-w-6xl mx-auto px-6 mt-12 text-sm text-gray-600">
+				&copy; {new Date().getFullYear()} Lifetime Fitness Club. All rights reserved.
+			</div>
+		</footer>
+
+	</body>
+</html>

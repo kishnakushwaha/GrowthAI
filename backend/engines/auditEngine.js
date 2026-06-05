@@ -310,6 +310,41 @@ async function getPageSpeedScore(url) {
   }
 }
 
+// ==================== TECH & EMAIL EXTRACTOR (PHASE 4) ====================
+
+function detectTech(html) {
+  const tech = { chatbots: [], voiceAgents: [] };
+  const lowerHtml = html.toLowerCase();
+  
+  // Chatbots
+  if (lowerHtml.includes('intercom.io') || lowerHtml.includes('window.intercom')) tech.chatbots.push('Intercom');
+  if (lowerHtml.includes('crisp.chat') || lowerHtml.includes('$crisp')) tech.chatbots.push('Crisp');
+  if (lowerHtml.includes('tidio.co') || lowerHtml.includes('tidiochatapi')) tech.chatbots.push('Tidio');
+  if (lowerHtml.includes('tawk.to')) tech.chatbots.push('Tawk.to');
+  
+  // Voice Agents
+  if (lowerHtml.includes('vapi.ai')) tech.voiceAgents.push('Vapi');
+  if (lowerHtml.includes('bland.ai')) tech.voiceAgents.push('Bland AI');
+  if (lowerHtml.includes('retellai.com')) tech.voiceAgents.push('Retell AI');
+  
+  return tech;
+}
+
+function extractEmails(html) {
+  const emails = new Set();
+  const emailRegex = /([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\.[a-zA-Z0-9._-]+)/gi;
+  const matches = html.match(emailRegex) || [];
+  
+  matches.forEach(email => {
+    // Filter false positives
+    if (!email.endsWith('.png') && !email.endsWith('.jpg') && !email.endsWith('.webp') && !email.endsWith('.js') && !email.includes('sentry.io')) {
+      emails.add(email.toLowerCase());
+    }
+  });
+  
+  return Array.from(emails);
+}
+
 // ==================== MAIN AUDIT FUNCTION ====================
 
 export async function runAudit(url) {
@@ -341,6 +376,10 @@ export async function runAudit(url) {
   
   // Run SEO analysis
   const seoResult = analyzeSEO(pageData.html, pageData.finalUrl);
+  
+  // Phase 4: Tech Stack and Email Extraction
+  const techStack = detectTech(pageData.html);
+  const emails = extractEmails(pageData.html);
   
   // Add SSL to checks
   seoResult.checks.push({
@@ -395,6 +434,8 @@ export async function runAudit(url) {
     pageSpeed: pageSpeed.error ? null : pageSpeed,
     ssl: sslResult,
     socials: seoResult.socials,
+    techStack,
+    emails,
     wordCount: seoResult.wordCount,
     duration: Date.now() - startTime,
     analyzedAt: new Date().toISOString()

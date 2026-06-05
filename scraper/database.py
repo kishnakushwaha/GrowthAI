@@ -70,10 +70,24 @@ def calculate_lead_score(website, reviews, rating):
     total = min(sum(scores.values()), 100)
     return total, scores
 
+import re
+
+def sanitize_phone(phone):
+    if not phone:
+        return ''
+    cleaned = re.sub(r'[^0-9]', '', str(phone))
+    if cleaned.startswith('0'):
+        cleaned = re.sub(r'^0+', '', cleaned)
+    if len(cleaned) == 10:
+        cleaned = '91' + cleaned
+    return cleaned
+
 def save_lead(data, agency_id=None):
     place_name = data.get('place_name')
     phone = data.get('phone')
     maps_url = data.get('maps_url')
+    
+    clean_phone = sanitize_phone(phone)
     
     # F4: Enhanced Deduplication — check maps_url (most reliable), then phone, then name
     if maps_url and maps_url != 'N/A':
@@ -82,8 +96,8 @@ def save_lead(data, agency_id=None):
             print(f"  ⏭️ Skipped duplicate (maps_url match): {place_name}")
             return False
 
-    if phone and phone != 'N/A':
-        res_phone = supabase.table('businesses').select('id').eq('phone', phone).execute()
+    if clean_phone:
+        res_phone = supabase.table('businesses').select('id').eq('phone', clean_phone).execute()
         if res_phone.data:
             print(f"  ⏭️ Skipped duplicate (phone match): {place_name}")
             return False
@@ -92,6 +106,7 @@ def save_lead(data, agency_id=None):
     if res_name.data:
         print(f"  ⏭️ Skipped duplicate (name match): {place_name}")
         return False
+
 
     # 2. Aggressive Scorer — A9: decomposed sub-scores
     lead_score, sub_scores = calculate_lead_score(data.get('website'), data.get('reviews'), data.get('rating'))
@@ -116,7 +131,7 @@ def save_lead(data, agency_id=None):
             'industry': data.get('industry'),
             'rating': rating_val,
             'reviews': reviews_val,
-            'phone': data.get('phone'),
+            'phone': clean_phone,
             'website': data.get('website'),
             'address': data.get('address'),
             'maps_url': data.get('maps_url'),

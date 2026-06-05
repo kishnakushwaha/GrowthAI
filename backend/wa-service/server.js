@@ -8,6 +8,10 @@ const { Client, LocalAuth } = pkg;
 import { pullLocalAuth, pushLocalAuth, clearLocalAuth } from './supabaseAuth.js';
 import qrcode from 'qrcode-terminal';
 import supabase from './supabaseClient.js';
+import { generateRagResponse } from '../engines/ragChatbotEngine.js';
+import { parseReplyIntent } from '../engines/geminiHelper.js';
+import { sendTelegramAlert } from '../telegramNotifier.js';
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -103,6 +107,77 @@ async function startWhatsApp() {
     idCache.clear(); // Clear cache on logout to be safe
   });
 
+  waClient.on('message', async (msg) => {
+    if (msg.from === 'status@broadcast') return;
+    console.log(`[WA] Received message from ${msg.from}: ${msg.body}`);
+    
+    const phone = msg.from.replace('@c.us', '');
+    try {
+      // 1. Find if this phone belongs to a tracked lead
+      const { data: enrollment } = await supabase
+         .from('wa_enrollments')
+         .select('lead_id')
+         .eq('phone', phone)
+         .single();
+         
+      if (enrollment) {
+         // Pause the automated sequence because the user replied
+         await supabase.from('wa_enrollments').update({ status: 'paused', next_run_at: null }).eq('lead_id', enrollment.lead_id);
+         
+         const { data: leadData } = await supabase.from('businesses').select('*').eq('id', enrollment.lead_id).single();
+         
+         console.log(`[WA] Parsing intent for reply from lead ${enrollment.lead_id}...`);
+         const intent = await parseReplyIntent(msg.body);
+         
+         let replyMsg = '';
+         if (intent.interested) {
+             console.log(`[WA] 🚨 Interested reply detected! Firing Telegram alert.`);
+             await sendTelegramAlert(leadData || { phone }, msg.body, intent);
+             
+             // Move to contacted in CRM
+             await supabase.from('pipeline_leads').update({ stage: 'contacted', updated_at: new Date().toISOString() }).eq('phone', phone);
+             
+             // Update outreach_log status
+             await supabase.from('outreach_log')
+               .update({ status: 'replied', reply_detected_at: new Date().toISOString() })
+               .eq('lead_id', enrollment.lead_id)
+               .neq('status', 'replied');
+
+             // Add Activity Log
+             await supabase.from('activities').insert({
+               lead_id: enrollment.lead_id,
+               type: 'replied',
+               title: 'WhatsApp Reply Detected (Interested)',
+               description: `Lead replied positively on WhatsApp. Automated sequences paused and moved to "Contacted" stage. AI Reason: ${intent.reason || 'N/A'}`
+             });
+
+             replyMsg = "Thanks! A member of our team will get back to you shortly.";
+             msg.reply(replyMsg);
+         } else {
+             // Engage RAG Engine for questions/objections
+             console.log(`[WA] Intent not explicitly interested. Triggering RAG Chatbot...`);
+             replyMsg = await generateRagResponse(enrollment.lead_id, msg.body);
+             msg.reply(replyMsg);
+         }
+         
+         // Log the conversation
+         await supabase.from('wa_logs').insert([
+            { phone, message: `[IN]: ${msg.body}`, type: 'incoming', status: 'received', lead_id: enrollment.lead_id },
+            { phone, message: `[RAG/INTENT]: ${replyMsg}`, type: 'automation', status: 'sent', lead_id: enrollment.lead_id }
+         ]);
+      } else {
+         // Fallback if not enrolled, but exists in pipeline
+         const { data: lead } = await supabase.from('pipeline_leads').select('id').eq('phone', phone).limit(1);
+         if (lead && lead.length > 0) {
+             const replyMsg = await generateRagResponse(lead[0].id, msg.body);
+             msg.reply(replyMsg);
+         }
+      }
+    } catch (e) {
+       console.error('[WA] Message handler error:', e.message);
+    }
+  });
+
   waClient.initialize();
   
   // A7: QR Timeout Monitor
@@ -160,7 +235,7 @@ app.post('/api/wa/send', async (req, res) => {
   }
 
   try {
-    const { phone, message, bizName, leadId } = req.body;
+    const { phone, message, bizName, leadId, type } = req.body;
     if (!phone || !message) {
       return res.status(400).json({ success: false, error: 'Phone and message required.' });
     }
@@ -205,7 +280,7 @@ app.post('/api/wa/send', async (req, res) => {
         phone: cleanedPhone,
         biz_name: bizName || 'Unknown',
         message: message.substring(0, 500),
-        type: 'manual',
+        type: type || 'manual',
         status: 'sent',
         lead_id: leadId || null
       });
@@ -365,12 +440,21 @@ app.post('/api/wa/enroll', requireAuth, async (req, res) => {
     return res.status(400).json({ error: 'Lead ID and Phone are required' });
   }
 
+  // Clean the phone number to digits only
+  let cleanedPhone = phone.replace(/[^0-9]/g, '');
+  if (cleanedPhone.startsWith('0')) {
+    cleanedPhone = cleanedPhone.replace(/^0+/, '');
+  }
+  if (cleanedPhone.length === 10) {
+    cleanedPhone = '91' + cleanedPhone;
+  }
+
   try {
     const { data, error } = await supabase
       .from('wa_enrollments')
       .upsert({
         lead_id: leadId,
-        phone,
+        phone: cleanedPhone,
         biz_name: bizName,
         city: city || 'your city',
         status: 'active',
@@ -384,7 +468,7 @@ app.post('/api/wa/enroll', requireAuth, async (req, res) => {
     // Try to send Day 1 message immediately
     if (isReady) {
       try {
-        await sendSequenceStep(leadId, phone, bizName, city, 1);
+        await sendSequenceStep(leadId, cleanedPhone, bizName, city, 1);
       } catch (e) {
         console.log('[WA] Day 1 auto-send failed, will retry on next cycle:', e.message);
       }
@@ -423,6 +507,20 @@ app.get('/api/wa/enrollments', requireAuth, async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch enrollments' });
   }
 });
+
+// 10. Manually trigger sequence execution
+app.post('/api/wa/process-sequences', requireAuth, async (req, res) => {
+  const force = !!req.body.force;
+  console.log(`[WA-API] Triggering processSequences manually (force: ${force})`);
+  try {
+    await processSequences(force);
+    res.json({ success: true });
+  } catch (err) {
+    console.error('[WA-API] process-sequences error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 
 // Sequence step templates
 const SEQUENCE_STEPS = [
@@ -486,10 +584,28 @@ async function sendSequenceStep(leadId, phone, bizName, city, step) {
   }
 }
 
+// Helper to sanitize phone numbers
+function sanitizePhone(phone) {
+  let cleaned = phone.replace(/[^0-9]/g, '');
+  if (cleaned.length === 10) cleaned = '91' + cleaned;
+  return cleaned;
+}
+
 // Sequence processor - runs every 5 minutes
-async function processSequences() {
-  if (!isReady) return;
-  console.log('[WA-SEQ] Running automation check...');
+async function processSequences(force = false) {
+  if (!isReady) {
+    console.log('[WA-SEQ] 📳 Running in MOCK mode (WhatsApp not connected)...');
+  }
+
+  // Working hours check (9 AM to 7 PM Kolkata time only) unless forced
+  const tzOptions = { timeZone: 'Asia/Kolkata', hour: 'numeric', hour12: false };
+  const hours = parseInt(new Date().toLocaleTimeString('en-US', tzOptions), 10);
+  if (!force && (hours >= 19 || hours < 9)) {
+    console.log('[WA-SEQ] 🌙 Outside working hours (after 7:00 PM or before 9:00 AM Kolkata time). Skipping sequences.');
+    return; // Silent skip outside business hours
+  }
+
+  console.log(`[WA-SEQ] Running automation check (force: ${force})...`);
   try {
     const { data: enrollments, error } = await supabase
       .from('wa_enrollments')
@@ -500,7 +616,15 @@ async function processSequences() {
     if (error || !enrollments?.length) return;
     console.log(`[WA-SEQ] Found ${enrollments.length} pending messages`);
 
+    // Deduplicate by phone within this cycle
+    const seenPhones = new Set();
     for (const e of enrollments) {
+      const phone = sanitizePhone(e.phone);
+      if (seenPhones.has(phone)) {
+        console.log(`[WA-SEQ] ⚠️ Duplicate phone ${phone} in enrollments batch. Skipping lead_id ${e.lead_id}.`);
+        continue;
+      }
+      seenPhones.add(phone);
       try {
         await sendSequenceStep(e.lead_id, e.phone, e.biz_name, e.city, e.current_step);
       } catch (err) {

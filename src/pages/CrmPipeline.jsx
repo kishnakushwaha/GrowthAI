@@ -735,6 +735,58 @@ const CrmPipeline = () => {
               </div>
             </div>
 
+            {/* Phase 4 Action Buttons */}
+            <div className="detail-activity-add" style={{ marginTop: '1rem' }}>
+              <h4>⚡ Quick Actions</h4>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button 
+                  className="btn btn-primary" 
+                  style={{ background: '#25D366', borderColor: '#25D366', flex: 1, padding: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(`${API}/api/leads/approve`, {
+                        method: 'POST',
+                        headers,
+                        body: JSON.stringify({ lead_id: detailLead.id, action: 'approve' })
+                      });
+                      const data = await res.json();
+                      if (data.success) {
+                        alert("Report Approved! 10-hour follow-up has been scheduled.");
+                        fetchLeads();
+                      } else {
+                        alert("Error: " + data.error);
+                      }
+                    } catch (e) { console.error(e); }
+                  }}
+                >
+                  <Check size={14} /> Approve Report
+                </button>
+
+                <button 
+                  className="btn btn-primary" 
+                  style={{ flex: 1, padding: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}
+                  onClick={async () => {
+                    try {
+                      const res = await fetch(`${API}/api/demo/build`, {
+                        method: 'POST',
+                        headers,
+                        body: JSON.stringify({ lead_id: detailLead.id })
+                      });
+                      const data = await res.json();
+                      if (data.success) {
+                        alert(`Demo generated successfully at: ${data.url}`);
+                        fetchLeads();
+                      } else {
+                        alert("Error: " + data.error);
+                      }
+                    } catch (e) { console.error(e); }
+                  }}
+                >
+                  <Globe size={14} /> Generate Demo Web
+                </button>
+              </div>
+            </div>
+
             {/* Enroll in Sequence */}
             <div className="detail-activity-add" style={{ marginTop: '1rem' }}>
               <h4>🚀 Enroll in Sequence</h4>

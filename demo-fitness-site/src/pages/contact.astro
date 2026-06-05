@@ -1,0 +1,32 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="Contact Us">
+	<section class="pt-32 pb-20 px-6 max-w-3xl mx-auto">
+		<h1 class="text-4xl md:text-5xl font-bold text-white mb-8">Let's Build Together</h1>
+		<p class="text-gray-400 mb-10 text-lg">Ready to start your next architectural project? Fill out the form below and our team will get back to you within 24 hours.</p>
+		
+		<form class="space-y-6 bg-white/5 p-8 rounded-xl border border-white/10" onsubmit="event.preventDefault(); alert('Message Sent! (Demo Mode)');">
+			<div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+				<div>
+					<label class="block text-sm font-medium text-gray-300 mb-2">First Name</label>
+					<input type="text" class="w-full bg-black/50 border border-white/10 rounded-md px-4 py-2 text-white focus:outline-none focus:border-white/30" placeholder="John" required />
+				</div>
+				<div>
+					<label class="block text-sm font-medium text-gray-300 mb-2">Last Name</label>
+					<input type="text" class="w-full bg-black/50 border border-white/10 rounded-md px-4 py-2 text-white focus:outline-none focus:border-white/30" placeholder="Doe" required />
+				</div>
+			</div>
+			<div>
+				<label class="block text-sm font-medium text-gray-300 mb-2">Email Address</label>
+				<input type="email" class="w-full bg-black/50 border border-white/10 rounded-md px-4 py-2 text-white focus:outline-none focus:border-white/30" placeholder="john@example.com" required />
+			</div>
+			<div>
+				<label class="block text-sm font-medium text-gray-300 mb-2">Message</label>
+				<textarea rows="4" class="w-full bg-black/50 border border-white/10 rounded-md px-4 py-2 text-white focus:outline-none focus:border-white/30" placeholder="Tell us about your project..." required></textarea>
+			</div>
+			<button type="submit" class="w-full bg-white text-black font-medium py-3 rounded-md hover:bg-gray-200 transition-colors">Send Message</button>
+		</form>
+	</section>
+</Layout>

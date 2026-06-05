@@ -14,6 +14,11 @@ import supabase from './supabaseClient.js';
 import { configureSmtp, getTransporter, getSmtpEmail, sendEmail, renderTemplate, trackOpen, trackClick, loadSmtpConfig } from './engines/emailEngine.js';
 import { STAGES, getLeads, createLead, updateLead, deleteLead, getActivities, addActivity, importFromScraper, getAnalytics } from './engines/crmEngine.js';
 import { processSequences } from './engines/waSequenceEngine.js';
+import { buildAndDeployDemo } from './engines/vercelDeployEngine.js';
+import { runAgenticLoop } from './engines/agenticLoop.js';
+import { startTelegramBot } from './engines/telegramBot.js';
+import { runResearcherAgent } from './engines/researcherAgent.js';
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -30,6 +35,9 @@ const ALLOWED_ORIGINS = [
 ].filter(Boolean);
 app.use(cors({ origin: ALLOWED_ORIGINS, credentials: true }));
 app.use(express.json());
+
+// Serve generated demo sites locally
+app.use('/demo-preview', express.static(path.join(__dirname, '.demo-builds')));
 
 // A1: Extension Token Auth — protects extension-facing endpoints
 const EXTENSION_SECRET = process.env.EXTENSION_SECRET || process.env.ADMIN_PASSWORD;
@@ -532,6 +540,80 @@ app.delete('/api/templates/:id', requireAuth, async (req, res) => {
   }
 });
 
+// ===================== PHASE 4.1: LEAD APPROVAL API =====================
+app.post('/api/leads/approve', requireAuth, async (req, res) => {
+  const { lead_id, action } = req.body;
+  if (!lead_id) return res.status(400).json({ error: 'lead_id is required' });
+  
+  try {
+    const newStatus = action === 'approve' ? 'APPROVED_REPORT_SENT' : 'REJECTED';
+    
+    // Update lead in pipeline
+    const { error } = await supabase
+      .from('pipeline_leads')
+      .update({ 
+        stage: newStatus
+      })
+      .eq('id', lead_id);
+      
+    if (error) throw error;
+    
+    if (action === 'approve') {
+       // Schedule 10-hour follow-up ping
+       await supabase.from('pending_outreach').insert({
+         lead_id,
+         channel: 'whatsapp',
+         message_body: 'Hi, just checking if you had a chance to review the intelligence report we sent over?',
+         status: 'scheduled',
+         scheduled_for: new Date(Date.now() + 10 * 60 * 60 * 1000).toISOString()
+       });
+       
+       await supabase.from('activities').insert({
+         lead_id,
+         type: 'report_approved',
+         title: 'Intelligence Report Approved & Sent',
+         description: 'Admin approved the report. 10-hour follow-up queued.'
+       });
+    }
+
+    res.json({ success: true, message: `Lead report ${action}d successfully.` });
+  } catch (err) {
+    console.error('Approve error:', err);
+    res.status(500).json({ error: 'Failed to process approval' });
+  }
+});
+
+// ===================== PHASE 4.3: DEMO BUILD API =====================
+app.post('/api/demo/build', requireAuth, async (req, res) => {
+  const { lead_id } = req.body;
+  if (!lead_id) return res.status(400).json({ error: 'lead_id is required' });
+  
+  try {
+    const { data: lead } = await supabase.from('pipeline_leads').select('*').eq('id', lead_id).single();
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
+
+    const demoUrl = await buildAndDeployDemo(lead, 'demo1');
+
+    // Update lead with the demo URL and stage
+    await supabase.from('pipeline_leads').update({
+      stage: 'proposal_sent', // Move to proposal sent stage
+      notes: (lead.notes ? lead.notes + '\n' : '') + `Demo URL: ${demoUrl}`
+    }).eq('id', lead_id);
+    
+    await supabase.from('activities').insert({
+       lead_id,
+       type: 'demo_built',
+       title: 'Demo Website Auto-Generated',
+       description: `A personalized demo was deployed to: ${demoUrl}`
+    });
+
+    res.json({ success: true, url: demoUrl });
+  } catch (err) {
+    console.error('Demo build error:', err);
+    res.status(500).json({ error: 'Failed to build demo' });
+  }
+});
+
 // ===================== WA MAGIC REWRITE (Phase 8.3) =====================
 app.post('/api/wa/ai-rewrite', requireAuth, async (req, res) => {
   try {
@@ -636,23 +718,32 @@ setInterval(async () => {
 
     proc.stdout.on('data', (data) => {
       const lines = data.toString().split('\n').filter(l => l.trim());
-      activeJobs[jobId].output.push(...lines);
+      if (activeJobs[jobId]) {
+        activeJobs[jobId].output.push(...lines);
+      }
       console.log(`[Scraper ${jobId}]`, data.toString().trim());
     });
 
     proc.stderr.on('data', (data) => {
-      activeJobs[jobId].output.push(`ERROR: ${data.toString().trim()}`);
+      if (activeJobs[jobId]) {
+        activeJobs[jobId].output.push(`ERROR: ${data.toString().trim()}`);
+      }
       console.error(`[Scraper ${jobId} ERR]`, data.toString().trim());
     });
 
     proc.on('close', async (code) => {
       const status = code === 0 ? 'completed' : 'failed';
-      activeJobs[jobId].status = status;
-      activeJobs[jobId].completedAt = new Date().toISOString();
+      if (activeJobs[jobId]) {
+        activeJobs[jobId].status = status;
+        activeJobs[jobId].completedAt = new Date().toISOString();
+      }
+      
+      const errorLog = (code !== 0 && activeJobs[jobId]) ? activeJobs[jobId].output.join('\n') : null;
+      
       await supabase.from('scrape_jobs').update({ 
         status, 
         completed_at: new Date().toISOString(),
-        error_log: code !== 0 ? activeJobs[jobId].output.join('\n') : null
+        error_log: errorLog
       }).eq('id', job.id);
     });
 
@@ -1883,12 +1974,21 @@ app.post('/api/wa/enroll', requireAuth, async (req, res) => {
   }
 
   try {
+    // Sanitize phone number
+    let cleanedPhone = phone.replace(/[^0-9]/g, '');
+    if (cleanedPhone.startsWith('0')) {
+      cleanedPhone = cleanedPhone.replace(/^0+/, '');
+    }
+    if (cleanedPhone.length === 10) {
+      cleanedPhone = '91' + cleanedPhone;
+    }
+
     // 1. Initial Enrollment
     const { data, error } = await supabase
       .from('wa_enrollments')
       .upsert({
         lead_id: leadId,
-        phone,
+        phone: cleanedPhone,
         biz_name: bizName,
         city: city || 'your city',
         status: 'active',
@@ -2022,6 +2122,49 @@ app.listen(PORT, async () => {
   processSequences();
   
   console.log('[CRON] ✅ Sequence engine scheduled for 9:00 AM and 3:00 PM IST daily');
+
+  // PHASE 4.1: 10-hour follow-up scheduler (runs every 5 minutes)
+  cron.schedule('*/5 * * * *', async () => {
+    try {
+      const now = new Date().toISOString();
+      const { data, error } = await supabase
+        .from('pending_outreach')
+        .update({ status: 'pending' })
+        .eq('status', 'scheduled')
+        .lte('scheduled_for', now)
+        .select('id');
+      
+      if (error) throw error;
+      if (data && data.length > 0) {
+        console.log(`[CRON] Phase 4.1: Activated ${data.length} scheduled follow-ups.`);
+      }
+    } catch (err) {
+      console.error('[CRON] Error checking scheduled outreach:', err.message);
+    }
+  });
+  console.log('[CRON] ✅ Follow-up scheduler initialized (every 5 mins)');
+
+  // PHASE 12: Researcher Agent — find hot niches every 2 hours
+  cron.schedule('0 */2 * * *', () => {
+    console.log('[CRON] Running researcherAgent() — scheduled niche research');
+    runResearcherAgent(supabase);
+  }, { timezone: 'Asia/Kolkata' });
+  console.log('[CRON] ✅ Researcher agent scheduled (every 2 hours)');
+
+  // PHASE 13: Start Telegram Bot
+  try {
+    const triggerScrape = (niche, city) => {
+      const scraperDir = path.join(__dirname, '..', 'scraper');
+      const proc = spawn('python3', ['main.py', '--query', niche, '--city', city, '--limit', '30'], { cwd: scraperDir });
+      proc.stdout.on('data', d => console.log(`[SCRAPER] ${d}`));
+      proc.stderr.on('data', d => console.error(`[SCRAPER] ${d}`));
+      proc.on('close', code => console.log(`[SCRAPER] Finished with code ${code}`));
+    };
+    startTelegramBot({ supabase, runAgenticLoop, triggerScrape });
+    console.log('[TELEGRAM] ✅ Bot started and listening for commands.');
+  } catch (err) {
+    console.warn('[TELEGRAM] ⚠️ Bot failed to start:', err.message);
+  }
 });
 
 // JSON 404 Handler (Phase 9 Polish)

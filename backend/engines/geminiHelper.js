@@ -86,7 +86,13 @@ export async function rewriteWithAI(baseTemplate, businessData, contactName = 't
     
     const defaultPrompt = `You are a casual, highly-effective sales closer sending a 1-to-1 WhatsApp message. 
 Take the following Template Draft and rewrite it so it sounds like a real human quickly typed it out on their phone to ${contactName} at ${businessData.place_name || 'their business'}. 
-Do not use corporate jargon. Avoid "Dear Sir/Madam". Be brief, punchy, and conversational (lowercase is fine, limited punctuation ok).`;
+Do not use corporate jargon. Avoid "Dear Sir/Madam". Be brief, punchy, and conversational (lowercase is fine, limited punctuation ok).
+- Use *bold* (asterisks) for the business name and key terms — this is WhatsApp bold syntax
+- Use _italic_ (underscores) for subtle emphasis on feelings or benefits
+- Keep the message casual, warm, and human — like a real person texting
+- Never use markdown headers (#), links, HTML tags, or emojis overload
+- Keep messages under 4 sentences
+- The output should look natural on WhatsApp, not like a marketing email`;
 
     const systemPrompt = industryPrompt || defaultPrompt;
 
@@ -145,3 +151,49 @@ async function logRewriteFailure(businessData, reason) {
     // Table may not exist yet — silent fail
   }
 }
+
+export async function parseReplyIntent(messageBody) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    console.warn('⚠️ GEMINI_API_KEY missing. Cannot parse intent.');
+    return { interested: false, reason: "API key missing" };
+  }
+
+  try {
+    await waitForRateLimit();
+    const prompt = `You are an expert sales assistant analyzing a reply from a business owner on WhatsApp.
+Determine if they are showing positive interest in our offer (AI Chatbots, Voice Agents, or SEO).
+If they say "yes", "sure", "tell me more", "price?", "how does it work", or anything positive/inquisitive, they are "Interested".
+If they say "stop", "no", "not interested", "unsubscribe", or are angry/dismissive, they are NOT interested.
+If it's an auto-reply or vague like "ok", lean towards NOT interested unless it's clearly a prompt to continue.
+
+Message from customer: "${messageBody}"
+
+Respond with ONLY a JSON object in this format:
+{"interested": true/false, "reason": "brief reason"}`;
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+    });
+
+    if (!response.ok) return { interested: false, reason: "API error" };
+    
+    const data = await response.json();
+    const textResult = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    if (!textResult) return { interested: false, reason: "No text returned" };
+    
+    try {
+      const cleanJson = textResult.replace(/```json/g, '').replace(/```/g, '').trim();
+      return JSON.parse(cleanJson);
+    } catch (e) {
+      console.error('Failed to parse intent JSON:', e);
+      return { interested: false, reason: "JSON parse error" };
+    }
+  } catch (err) {
+    console.error('❌ Gemini Intent Parse Error:', err.message);
+    return { interested: false, reason: "Exception thrown" };
+  }
+}
+

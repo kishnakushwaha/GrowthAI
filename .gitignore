@@ -82,3 +82,12 @@ architecture_graph.md
 docs/*.md
 !docs/README.md
 !docs/MASTER_PLAN.md
+growthai_architecture_history.md
+
+# WhatsApp Web Auth & Cache
+backend/wa-service/.wwebjs_auth/
+backend/wa-service/.wwebjs_cache/
+backend/wa-service/.cache/
+
+# Generated Demo Websites
+backend/.demo-builds/
