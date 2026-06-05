@@ -91,6 +91,7 @@ Do not use corporate jargon. Avoid "Dear Sir/Madam". Be brief, punchy, and conve
 - Use _italic_ (underscores) for subtle emphasis on feelings or benefits
 - Keep the message casual, warm, and human — like a real person texting
 - Never use markdown headers (#), links, HTML tags, or emojis overload
+- Never offer or mention a "video" or "1-min video". Instead, always offer a "free interactive mockup website", "custom preview website", or "demo website"
 - Keep messages under 4 sentences
 - The output should look natural on WhatsApp, not like a marketing email`;
 

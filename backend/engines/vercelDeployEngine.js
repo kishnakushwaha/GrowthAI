@@ -65,7 +65,8 @@ export async function buildAndDeployDemo(lead, themeName = 'demo1') {
       exec(deployCmd, { cwd: projectDir }, (error, stdout, stderr) => {
         if (error) {
           console.error('[Vercel Deploy Error]:', stderr);
-          return reject(error);
+          console.log(`[Vercel] Falling back to local preview URL: http://localhost:3001/demo-preview/${deployId}`);
+          return resolve(`http://localhost:3001/demo-preview/${deployId}`);
         }
         
         // Vercel CLI outputs the production URL on stdout

@@ -191,7 +191,7 @@ export async function runAgenticLoop(force = false) {
         
         const draft = `Hi, I was looking for ${lead.industry || 'services'} in your area and found ${lead.place_name}.
 ${pitchAngle}
-I put together a quick 1-min video showing exactly how to fix this. Mind if I send the link here?`;
+I created a custom interactive mockup showing exactly how we can improve this. Mind if I send the link here?`;
 
         pitchMessage = await rewriteWithAI(draft, { ...lead, ai_human_summary: enrichment?.ai_human_summary }) || draft;
 
