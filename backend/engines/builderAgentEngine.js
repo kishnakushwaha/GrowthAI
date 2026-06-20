@@ -265,7 +265,7 @@ async function callLLM(prompt, responseMimeType = null) {
   // Default: Gemini
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error('GEMINI_API_KEY is missing in env');
-  const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+  const model = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
   console.log(`[LLM] Calling Gemini API with model ${model}...`);
   
   const response = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
@@ -336,11 +336,38 @@ function extractGooglePhotos(lead) {
   return photoUrls;
 }
 
+// ===================== HELPER: Validate Image Availability =====================
+async function isImageUrlValid(url) {
+  if (!url || typeof url !== 'string' || !url.startsWith('http')) return false;
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 2000);
+    const response = await fetch(url, { method: 'HEAD', signal: controller.signal });
+    clearTimeout(timeoutId);
+    return response.ok;
+  } catch (e) {
+    return false;
+  }
+}
+
 // ===================== HELPER: Multi-source Image Selection =====================
 async function getFinalImagesList(lead, query, macroIndustry, count = 10) {
-  // 1. Get real photos from lead
-  const googlePhotos = extractGooglePhotos(lead);
-  console.log(`[ImageFetcher] Found ${googlePhotos.length} suitable Google Photos from lead data.`);
+  // 1. Get real photos from lead and verify they are accessible (not broken/404)
+  const rawGooglePhotos = extractGooglePhotos(lead);
+  console.log(`[ImageFetcher] Found ${rawGooglePhotos.length} candidate Google Photos from lead data. Verifying availability...`);
+  
+  const validationResults = await Promise.all(
+    rawGooglePhotos.map(async (url) => {
+      const isValid = await isImageUrlValid(url);
+      return { url, isValid };
+    })
+  );
+  
+  const googlePhotos = validationResults
+    .filter(res => res.isValid)
+    .map(res => res.url);
+    
+  console.log(`[ImageFetcher] Verified ${googlePhotos.length} valid Google Photos.`);
   
   // 2. Fetch Unsplash/Curated fallbacks
   let fallbackImages = [];

@@ -15,6 +15,7 @@ import { configureSmtp, getTransporter, getSmtpEmail, sendEmail, renderTemplate,
 import { STAGES, getLeads, createLead, updateLead, deleteLead, getActivities, addActivity, importFromScraper, getAnalytics } from './engines/crmEngine.js';
 import { processSequences } from './engines/waSequenceEngine.js';
 import { buildAndDeployDemo } from './engines/vercelDeployEngine.js';
+import { buildAndDeployAgentSite } from './engines/builderAgentEngine.js';
 import { runAgenticLoop } from './engines/agenticLoop.js';
 import { startTelegramBot } from './engines/telegramBot.js';
 import { runResearcherAgent } from './engines/researcherAgent.js';
@@ -611,6 +612,42 @@ app.post('/api/demo/build', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('Demo build error:', err);
     res.status(500).json({ error: 'Failed to build demo' });
+  }
+});
+
+// ===================== AGENTIC SMART BUILDER API =====================
+app.post('/api/builder/generate', async (req, res) => {
+  const { lead } = req.body;
+  if (!lead) return res.status(400).json({ error: 'lead data is required' });
+  
+  try {
+    console.log(`[API] Triggering Smart Builder Agent for: ${lead.place_name || lead.business_name || 'Business'}`);
+    const previewUrl = await buildAndDeployAgentSite(lead);
+    
+    // Attempt to update lead status in Supabase if exists
+    try {
+      const { data: dbLead } = await supabase.from('pipeline_leads').select('*').eq('phone', lead.phone).maybeSingle();
+      if (dbLead) {
+        await supabase.from('pipeline_leads').update({
+          stage: 'proposal_sent',
+          notes: (dbLead.notes ? dbLead.notes + '\n' : '') + `Agent Preview: ${previewUrl}`
+        }).eq('id', dbLead.id);
+        
+        await supabase.from('activities').insert({
+           lead_id: dbLead.id,
+           type: 'demo_built',
+           title: 'Premium Demo Site Generated',
+           description: `A dynamic premium Astro site was deployed: ${previewUrl}`
+        });
+      }
+    } catch (dbErr) {
+      console.warn('[API] Could not update lead in CRM DB:', dbErr.message);
+    }
+    
+    res.json({ success: true, url: previewUrl });
+  } catch (err) {
+    console.error('Smart Builder API Error:', err);
+    res.status(500).json({ error: 'Failed to generate premium website' });
   }
 });
 
@@ -1469,7 +1506,7 @@ app.post('/api/intelligence/enrich/:id', requireAuth, async (req, res) => {
     
     Return ONLY a JSON object with: "ai_human_summary" (string) and "ai_first_line" (string).`;
 
-    const geminiModel = 'gemini-2.0-flash';
+    const geminiModel = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${process.env.GEMINI_API_KEY}`;
     
     log.info('Calling Gemini AI for enrichment', { leadId: id, model: geminiModel });
