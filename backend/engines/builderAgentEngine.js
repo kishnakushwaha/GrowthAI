@@ -840,7 +840,7 @@ const copy = ${JSON.stringify(copy)};
         <h1 class="text-5xl md:text-7xl font-bold ${strategy.fontFamilyHeading || 'font-serif'} text-transparent bg-clip-text bg-gradient-to-r from-white via-zinc-200 to-zinc-500 mb-4 tracking-tight">Our Services</h1>
         <p class="text-zinc-400 max-w-2xl mx-auto leading-relaxed">Discover our collection of premium, professional services designed to deliver exceptional value.</p>
       </div>
-      <${servicesComponent} services={copy.services.map((s, i) => ({ ...s, image: images[(i + 2) % images.length] }))} client:load />
+      <${servicesComponent} services={copy.services.map((s, i) => ({ ...s, image: images[(i + 2) % images.length] }))} primaryColor="${strategy.tailwindPrimaryColor || 'emerald-600'}" client:load />
     </div>
   </section>
 
@@ -947,7 +947,7 @@ const email = "${businessEmail}";
         <h1 class="text-5xl md:text-7xl font-bold ${strategy.fontFamilyHeading || 'font-serif'} text-transparent bg-clip-text bg-gradient-to-r from-white via-zinc-200 to-zinc-500 mb-4 tracking-tight">{copy.contact.headline || "Get In Touch"}</h1>
         <p class="text-zinc-400 max-w-2xl mx-auto leading-relaxed">{copy.contact.tagline || "We'd love to hear from you. Reach out and let's start a conversation."}</p>
       </div>
-      <${contactComponent} title={copy.contact.headline || "Get In Touch"} phone={phone} address={address} email={email} client:load />
+      <${contactComponent} title={copy.contact.headline || "Get In Touch"} phone={phone} address={address} email={email} primaryColor="${strategy.tailwindPrimaryColor || 'emerald-600'}" client:load />
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div class="p-8 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md text-center hover:border-${strategy.tailwindPrimaryColor || 'amber-500'}/30 transition-all duration-500">
           <div class="w-12 h-12 rounded-full bg-${strategy.tailwindPrimaryColor || 'amber-500'}/10 flex items-center justify-center mx-auto mb-4">
