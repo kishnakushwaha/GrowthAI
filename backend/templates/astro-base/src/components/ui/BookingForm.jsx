@@ -49,10 +49,58 @@ const colorsMap = {
     borderFocus: 'focus:border-indigo-600',
     bgLight: 'bg-indigo-600/10',
     ring: 'focus:ring-indigo-600/20 shadow-indigo-600/10'
-  }
+  },
+  'teal-600': {
+    bg: 'bg-teal-600 text-white hover:bg-teal-700',
+    text: 'text-teal-600',
+    border: 'border-teal-600',
+    borderFocus: 'focus:border-teal-600',
+    bgLight: 'bg-teal-600/10',
+    ring: 'focus:ring-teal-600/20 shadow-teal-600/10'
+  },
+  'orange-600': {
+    bg: 'bg-orange-600 text-white hover:bg-orange-700',
+    text: 'text-orange-600',
+    border: 'border-orange-600',
+    borderFocus: 'focus:border-orange-600',
+    bgLight: 'bg-orange-600/10',
+    ring: 'focus:ring-orange-600/20 shadow-orange-600/10'
+  },
+  'lime-500': {
+    bg: 'bg-lime-500 text-black hover:bg-lime-600',
+    text: 'text-lime-500',
+    border: 'border-lime-500',
+    borderFocus: 'focus:border-lime-500',
+    bgLight: 'bg-lime-500/10',
+    ring: 'focus:ring-lime-500/20 shadow-lime-500/10'
+  },
+  'pink-600': {
+    bg: 'bg-pink-600 text-white hover:bg-pink-700',
+    text: 'text-pink-600',
+    border: 'border-pink-600',
+    borderFocus: 'focus:border-pink-600',
+    bgLight: 'bg-pink-600/10',
+    ring: 'focus:ring-pink-600/20 shadow-pink-600/10'
+  },
+  'cyan-600': {
+    bg: 'bg-cyan-600 text-white hover:bg-cyan-700',
+    text: 'text-cyan-600',
+    border: 'border-cyan-600',
+    borderFocus: 'focus:border-cyan-600',
+    bgLight: 'bg-cyan-600/10',
+    ring: 'focus:ring-cyan-600/20 shadow-cyan-600/10'
+  },
+  'violet-600': {
+    bg: 'bg-violet-600 text-white hover:bg-violet-700',
+    text: 'text-violet-600',
+    border: 'border-violet-600',
+    borderFocus: 'focus:border-violet-600',
+    bgLight: 'bg-violet-600/10',
+    ring: 'focus:ring-violet-600/20 shadow-violet-600/10'
+  },
 };
 
-const getColors = (color) => colorsMap[color] || colorsMap['amber-500'];
+const getColors = (color) => colorsMap[color] || colorsMap['teal-600'];
 
 const timeSlots = [
   "09:00 AM", "10:00 AM", "11:00 AM", "12:00 PM",
@@ -75,7 +123,7 @@ const getUpcomingDays = () => {
   return days;
 };
 
-export function BookingForm({ services, primaryColor = 'amber-500', businessPhone = '' }) {
+export function BookingForm({ services, primaryColor = 'teal-600', themeMode = 'light', businessPhone = '' }) {
   const c = getColors(primaryColor);
   const safeServices = Array.isArray(services) ? services : [];
   
@@ -125,8 +173,28 @@ export function BookingForm({ services, primaryColor = 'amber-500', businessPhon
     }
   };
 
+  // Theme-adaptive card styling
+  const isDark = themeMode === 'dark';
+  const cardBg = isDark
+    ? 'bg-zinc-900/50 border-white/10 backdrop-blur-md'
+    : 'bg-white border-gray-200 shadow-sm';
+  const inputBg = isDark
+    ? 'bg-zinc-900/60 border-white/10 text-white placeholder-zinc-500'
+    : 'bg-gray-50 border-gray-200 text-gray-900 placeholder-gray-400';
+  const labelColor = isDark ? 'text-zinc-300' : 'text-gray-700';
+  const headingColor = isDark ? 'text-white' : 'text-gray-900';
+  const subColor = isDark ? 'text-zinc-400' : 'text-gray-500';
+  const stepLabel = isDark ? 'text-zinc-500' : 'text-gray-400';
+  const cardItem = isDark
+    ? 'border-white/5 bg-zinc-900/40 hover:border-white/10 hover:bg-zinc-900/60'
+    : 'border-gray-200 bg-gray-50 hover:border-gray-300 hover:bg-white';
+  const backBtn = isDark
+    ? 'border border-white/10 text-white hover:bg-white/5'
+    : 'border border-gray-200 text-gray-700 hover:bg-gray-50';
+  const progressBg = isDark ? 'bg-white/5' : 'bg-gray-100';
+
   return (
-    <div className="w-full max-w-4xl mx-auto bg-zinc-900/50 border border-white/10 rounded-3xl p-6 md:p-10 backdrop-blur-md shadow-2xl relative overflow-hidden min-h-[500px] flex flex-col justify-between">
+    <div className={`w-full max-w-4xl mx-auto border rounded-3xl p-6 md:p-10 shadow-2xl relative overflow-hidden min-h-[500px] flex flex-col justify-between ${cardBg}`}>
       {/* Background glow styling */}
       <div className={`absolute top-0 right-0 w-80 h-80 rounded-full ${primaryColor === 'amber-500' ? 'bg-amber-500/5' : 'bg-' + primaryColor + '/5'} blur-3xl -z-10 pointer-events-none`}></div>
       <div className="absolute bottom-0 left-0 w-80 h-80 rounded-full bg-white/5 blur-3xl -z-10 pointer-events-none"></div>
@@ -137,11 +205,11 @@ export function BookingForm({ services, primaryColor = 'amber-500', businessPhon
             {/* Step Progress Header */}
             <div>
               <div className="flex justify-between items-center mb-6">
-                <span className="text-zinc-500 text-xs font-semibold uppercase tracking-wider">Step {step} of 3</span>
+                <span className={`text-xs font-semibold uppercase tracking-wider ${stepLabel}`}>Step {step} of 3</span>
                 <span className={`text-sm font-medium ${c.text}`}>{step === 1 ? 'Select Service' : step === 2 ? 'Schedule Appointment' : 'Your Details'}</span>
               </div>
               
-              <div className="w-full bg-white/5 h-1.5 rounded-full overflow-hidden mb-8">
+              <div className={`w-full h-1.5 rounded-full overflow-hidden mb-8 ${progressBg}`}>
                 <motion.div 
                   className={`h-full ${c.bg.split(' ')[0]}`}
                   initial={{ width: '33.3%' }}
@@ -162,8 +230,8 @@ export function BookingForm({ services, primaryColor = 'amber-500', businessPhon
                   className="space-y-6"
                 >
                   <div className="text-center md:text-left mb-6">
-                    <h2 className="text-2xl font-bold text-white mb-2">What service are you looking for?</h2>
-                    <p className="text-zinc-400 text-sm">Please choose a service from the options below to get started.</p>
+                    <h2 className={`text-2xl font-bold mb-2 ${headingColor}`}>What service are you looking for?</h2>
+                    <p className={`text-sm ${subColor}`}>Please choose a service from the options below to get started.</p>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
@@ -175,13 +243,13 @@ export function BookingForm({ services, primaryColor = 'amber-500', businessPhon
                           onClick={() => setSelectedService(service)}
                           className={`p-5 rounded-2xl border transition-all duration-300 cursor-pointer flex flex-col justify-between ${
                             isSelected 
-                              ? `${c.border} bg-white/5 shadow-[0_0_15px_rgba(255,255,255,0.02)]` 
-                              : 'border-white/5 bg-zinc-900/40 hover:border-white/10 hover:bg-zinc-900/60'
+                              ? `${c.border} ${isDark ? 'bg-white/5' : 'bg-' + primaryColor.split('-')[0] + '-50'}` 
+                              : cardItem
                           }`}
                         >
                           <div>
                             <div className="flex justify-between items-start mb-2">
-                              <h3 className="text-lg font-semibold text-white tracking-tight">{service.title}</h3>
+                              <h3 className={`text-lg font-semibold tracking-tight ${headingColor}`}>{service.title}</h3>
                               {isSelected && (
                                 <div className={`w-5 h-5 rounded-full ${c.bg.split(' ')[0]} flex items-center justify-center`}>
                                   <svg className="w-3 h-3 text-current" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="3">
@@ -190,7 +258,7 @@ export function BookingForm({ services, primaryColor = 'amber-500', businessPhon
                                 </div>
                               )}
                             </div>
-                            <p className="text-zinc-400 text-sm line-clamp-3 leading-relaxed mb-4">{service.description}</p>
+                            <p className={`text-sm line-clamp-3 leading-relaxed mb-4 ${subColor}`}>{service.description}</p>
                           </div>
                           {service.price && (
                             <span className={`text-base font-bold ${c.text}`}>{service.price}</span>
@@ -211,13 +279,13 @@ export function BookingForm({ services, primaryColor = 'amber-500', businessPhon
                   className="space-y-8"
                 >
                   <div className="text-center md:text-left">
-                    <h2 className="text-2xl font-bold text-white mb-2">Choose Date & Time</h2>
-                    <p className="text-zinc-400 text-sm">Select a convenient day and time slot for your appointment.</p>
+                    <h2 className={`text-2xl font-bold mb-2 ${headingColor}`}>Choose Date & Time</h2>
+                    <p className={`text-sm ${subColor}`}>Select a convenient day and time slot for your appointment.</p>
                   </div>
 
                   {/* Horizontal Date Picker */}
                   <div className="space-y-3">
-                    <label className="text-sm font-semibold text-zinc-300">Select Date</label>
+                    <label className={`text-sm font-semibold ${labelColor}`}>Select Date</label>
                     <div className="flex gap-3 overflow-x-auto pb-3 scrollbar-thin scrollbar-thumb-white/10 select-none">
                       {upcomingDays.map((day, i) => {
                         const isSelected = selectedDate === day.rawDate;
@@ -228,12 +296,12 @@ export function BookingForm({ services, primaryColor = 'amber-500', businessPhon
                             onClick={() => setSelectedDate(day.rawDate)}
                             className={`flex-shrink-0 w-24 py-4 rounded-xl border text-center cursor-pointer transition-all duration-300 flex flex-col justify-center gap-1 ${
                               isSelected
-                                ? `${c.border} bg-white/5`
-                                : 'border-white/5 bg-zinc-900/40 hover:border-white/15'
+                                ? `${c.border} ${isDark ? 'bg-white/5' : c.bgLight}`
+                                : isDark ? 'border-white/5 bg-zinc-900/40 hover:border-white/15' : 'border-gray-200 bg-gray-50 hover:border-gray-300'
                             }`}
                           >
-                            <span className="text-xs uppercase text-zinc-500 font-bold">{wday}</span>
-                            <span className="text-xl font-bold text-white">{mday.trim()}</span>
+                            <span className={`text-xs uppercase font-bold ${stepLabel}`}>{wday}</span>
+                            <span className={`text-xl font-bold ${headingColor}`}>{mday.trim()}</span>
                           </div>
                         );
                       })}
@@ -242,7 +310,7 @@ export function BookingForm({ services, primaryColor = 'amber-500', businessPhon
 
                   {/* Grid Time Picker */}
                   <div className="space-y-3">
-                    <label className="text-sm font-semibold text-zinc-300">Available Slots</label>
+                    <label className={`text-sm font-semibold ${labelColor}`}>Available Slots</label>
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
                       {timeSlots.map((slot, i) => {
                         const isSelected = selectedTime === slot;
@@ -254,7 +322,7 @@ export function BookingForm({ services, primaryColor = 'amber-500', businessPhon
                             className={`py-3 px-2 rounded-xl text-sm font-medium border text-center transition-all duration-300 ${
                               isSelected
                                 ? `${c.bg} ${c.border}`
-                                : 'border-white/5 bg-zinc-900/40 hover:border-white/15 text-zinc-300'
+                                : isDark ? 'border-white/5 bg-zinc-900/40 hover:border-white/15 text-zinc-300' : 'border-gray-200 bg-gray-50 hover:border-gray-300 text-gray-600'
                             }`}
                           >
                             {slot}
@@ -275,13 +343,13 @@ export function BookingForm({ services, primaryColor = 'amber-500', businessPhon
                   className="space-y-6"
                 >
                   <div className="text-center md:text-left mb-4">
-                    <h2 className="text-2xl font-bold text-white mb-2">Provide Your Information</h2>
-                    <p className="text-zinc-400 text-sm">Please share your contact details to lock in your booking.</p>
+                    <h2 className={`text-2xl font-bold mb-2 ${headingColor}`}>Provide Your Information</h2>
+                    <p className={`text-sm ${subColor}`}>Please share your contact details to lock in your booking.</p>
                   </div>
 
                   <form id="details-form" onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="space-y-2">
-                      <label className="text-sm font-medium text-zinc-300">Full Name</label>
+                      <label className={`text-sm font-medium ${labelColor}`}>Full Name</label>
                       <input
                         type="text"
                         name="name"
@@ -289,11 +357,11 @@ export function BookingForm({ services, primaryColor = 'amber-500', businessPhon
                         value={formData.name}
                         onChange={handleInputChange}
                         placeholder="John Doe"
-                        className={`w-full bg-zinc-900/60 border border-white/10 rounded-xl px-5 py-4 text-white placeholder-zinc-500 outline-none transition-all ${c.borderFocus} ${c.ring}`}
+                        className={`w-full rounded-xl px-5 py-4 outline-none transition-all border ${inputBg} ${c.borderFocus} ${c.ring}`}
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-sm font-medium text-zinc-300">Email Address</label>
+                      <label className={`text-sm font-medium ${labelColor}`}>Email Address</label>
                       <input
                         type="email"
                         name="email"
@@ -301,11 +369,11 @@ export function BookingForm({ services, primaryColor = 'amber-500', businessPhon
                         value={formData.email}
                         onChange={handleInputChange}
                         placeholder="john@example.com"
-                        className={`w-full bg-zinc-900/60 border border-white/10 rounded-xl px-5 py-4 text-white placeholder-zinc-500 outline-none transition-all ${c.borderFocus} ${c.ring}`}
+                        className={`w-full rounded-xl px-5 py-4 outline-none transition-all border ${inputBg} ${c.borderFocus} ${c.ring}`}
                       />
                     </div>
                     <div className="space-y-2 md:col-span-2">
-                      <label className="text-sm font-medium text-zinc-300">Phone Number</label>
+                      <label className={`text-sm font-medium ${labelColor}`}>Phone Number</label>
                       <input
                         type="tel"
                         name="phone"
@@ -313,18 +381,18 @@ export function BookingForm({ services, primaryColor = 'amber-500', businessPhon
                         value={formData.phone}
                         onChange={handleInputChange}
                         placeholder="+1 (555) 000-0000"
-                        className={`w-full bg-zinc-900/60 border border-white/10 rounded-xl px-5 py-4 text-white placeholder-zinc-500 outline-none transition-all ${c.borderFocus} ${c.ring}`}
+                        className={`w-full rounded-xl px-5 py-4 outline-none transition-all border ${inputBg} ${c.borderFocus} ${c.ring}`}
                       />
                     </div>
                     <div className="space-y-2 md:col-span-2">
-                      <label className="text-sm font-medium text-zinc-300">Special Instructions / Notes (Optional)</label>
+                      <label className={`text-sm font-medium ${labelColor}`}>Special Instructions / Notes (Optional)</label>
                       <textarea
                         name="notes"
                         rows="3"
                         value={formData.notes}
                         onChange={handleInputChange}
                         placeholder="Any special requests or details we should know..."
-                        className={`w-full bg-zinc-900/60 border border-white/10 rounded-xl px-5 py-4 text-white placeholder-zinc-500 outline-none transition-all resize-none ${c.borderFocus} ${c.ring}`}
+                        className={`w-full rounded-xl px-5 py-4 outline-none transition-all resize-none border ${inputBg} ${c.borderFocus} ${c.ring}`}
                       />
                     </div>
                   </form>
@@ -333,12 +401,12 @@ export function BookingForm({ services, primaryColor = 'amber-500', businessPhon
             </div>
 
             {/* Step Controls Footer */}
-            <div className="flex justify-between items-center border-t border-white/5 pt-6 mt-8">
+            <div className={`flex justify-between items-center border-t pt-6 mt-8 ${isDark ? 'border-white/5' : 'border-gray-200'}`}>
               {step > 1 ? (
                 <button
                   type="button"
                   onClick={handlePrevStep}
-                  className="px-6 py-3 rounded-xl border border-white/10 text-white font-medium hover:bg-white/5 transition-all"
+                  className={`px-6 py-3 rounded-xl font-medium transition-all ${backBtn}`}
                 >
                   Back
                 </button>
@@ -354,7 +422,7 @@ export function BookingForm({ services, primaryColor = 'amber-500', businessPhon
                   className={`px-8 py-3 rounded-xl font-bold transition-all ${
                     ((step === 1 && selectedService) || (step === 2 && selectedDate && selectedTime))
                       ? c.bg
-                      : 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-white/5'
+                      : isDark ? 'bg-zinc-800 text-zinc-500 cursor-not-allowed border border-white/5' : 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
                   }`}
                 >
                   Continue
@@ -385,27 +453,27 @@ export function BookingForm({ services, primaryColor = 'amber-500', businessPhon
             </div>
             
             <div className="space-y-2">
-              <h2 className="text-3xl font-extrabold text-white tracking-tight">Booking Requested!</h2>
-              <p className="text-zinc-400 text-sm max-w-md mx-auto">Thank you, {formData.name}. We've received your booking request and will follow up shortly to confirm details.</p>
+              <h2 className={`text-3xl font-extrabold tracking-tight ${headingColor}`}>Booking Requested!</h2>
+              <p className={`text-sm max-w-md mx-auto ${subColor}`}>Thank you, {formData.name}. We've received your booking request and will follow up shortly to confirm details.</p>
             </div>
 
             {/* Summary Details */}
-            <div className="w-full max-w-md bg-white/5 border border-white/5 rounded-2xl p-6 text-left space-y-4">
-              <h4 className="text-white font-bold border-b border-white/5 pb-2 text-sm uppercase tracking-wider">Booking Details</h4>
+            <div className={`w-full max-w-md border rounded-2xl p-6 text-left space-y-4 ${isDark ? 'bg-white/5 border-white/5' : 'bg-gray-50 border-gray-200'}`}>
+              <h4 className={`font-bold border-b pb-2 text-sm uppercase tracking-wider ${isDark ? 'text-white border-white/5' : 'text-gray-900 border-gray-200'}`}>Booking Details</h4>
               <div className="grid grid-cols-3 gap-y-3 text-sm">
-                <span className="text-zinc-500">Service:</span>
-                <span className="col-span-2 text-white font-semibold">{selectedService?.title}</span>
+                <span className={subColor}>Service:</span>
+                <span className={`col-span-2 font-semibold ${headingColor}`}>{selectedService?.title}</span>
                 
-                <span className="text-zinc-500">Date:</span>
-                <span className="col-span-2 text-white font-semibold">
+                <span className={subColor}>Date:</span>
+                <span className={`col-span-2 font-semibold ${headingColor}`}>
                   {upcomingDays.find(d => d.rawDate === selectedDate)?.dateStr || selectedDate}
                 </span>
                 
-                <span className="text-zinc-500">Time:</span>
-                <span className="col-span-2 text-white font-semibold">{selectedTime}</span>
+                <span className={subColor}>Time:</span>
+                <span className={`col-span-2 font-semibold ${headingColor}`}>{selectedTime}</span>
 
-                <span className="text-zinc-500">Phone:</span>
-                <span className="col-span-2 text-white font-semibold">{formData.phone}</span>
+                <span className={subColor}>Phone:</span>
+                <span className={`col-span-2 font-semibold ${headingColor}`}>{formData.phone}</span>
               </div>
             </div>
 
