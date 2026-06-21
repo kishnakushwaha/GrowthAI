@@ -491,7 +491,6 @@ async function classifyIndustry(lead) {
 }
 
 // ===================== AGENT 1: THE BRAND DIRECTOR =====================
-// ===================== AGENT 1: THE BRAND DIRECTOR =====================
 async function generateBrandStrategy(lead, industryInfo) {
   console.log(`[DirectorAgent] 🕴️ Formulating visual identity for ${getBizName(lead)} based on industry strategy...`);
   
@@ -505,46 +504,91 @@ async function generateBrandStrategy(lead, industryInfo) {
   Business: ${bizName}
   Industry Info:
   ${infoText}
-  
-  Available Components:
-  - Heros: HeroVideoBackground, HeroGlass, HeroWavy, HeroTracingBeam, HeroDarkMatter
-  - Reviews: ReviewsInfiniteMarquee, ReviewsMasonry, ReviewsCards
-  - Services: ServicesHoverReveal, ServicesBento, ServicesGlass
-  - Contact: ContactSplit, ContactGlass, ContactMap
 
-  Theme Color Guidelines:
-  - trust_medical: emerald-600, blue-600, sky-500, or teal-500
-  - emergency_home_service: amber-500, orange-500, or red-500
-  - cozy_restaurant: orange-500, amber-600, or yellow-500
-  - elegant_salon: rose-500, rose-600, violet-500, or fuchsia-500
-  - active_gym: green-500, lime-500, sky-400, or red-600
-  - professional_office: blue-600, indigo-600, or slate-400
-  - default/generic: amber-500, sky-500
+  Theme Color & Mode Guidelines:
+  - medical (clinics, dentists, doctors): themeMode "light", teal/emerald/blue (e.g. primary "#0d9488" (teal-600), primaryLight "#f0fdfa" (teal-50), primaryDark "#0f766e" (teal-700), accent "#f59e0b" (amber-500), bg "#ffffff", bgSecondary "#f8fafc", text "#0f172a", textSecondary "#475569")
+  - home_services (plumbing, electrical): themeMode "light", blue/amber/orange (primary "#2563eb", primaryLight "#f0f9ff", primaryDark "#1d4ed8", accent "#f59e0b", bg "#ffffff", bgSecondary "#f8fafc", text "#0f172a", textSecondary "#475569")
+  - food (restaurants, cafes): themeMode "light", cozy warm colors like orange/amber/brown (primary "#ea580c", primaryLight "#fffedd5", primaryDark "#c2410c", accent "#b45309", bg "#fffdfa", bgSecondary "#fdf8f2", text "#1e1b18", textSecondary "#5c5752")
+  - beauty (salons, spas): themeMode "light", elegant colors like rose/fuchsia/violet (primary "#db2777", primaryLight "#fff1f2", primaryDark "#be185d", accent "#8b5cf6", bg "#ffffff", bgSecondary "#fff5f5", text "#1f2937", textSecondary "#4b5563")
+  - fitness (gyms): themeMode "dark", active energetic colors like lime/green/red/orange (primary "#84cc16" (lime-500), primaryLight "#1f2937", primaryDark "#4d7c0f", accent "#f97316", bg "#09090b", bgSecondary "#18181b", text "#fafafa", textSecondary "#a1a1aa")
+  - professional (lawyers, offices): themeMode "light", corporate blue/indigo/slate (primary "#1e3a8a", primaryLight "#eff6ff", primaryDark "#172554", accent "#475569", bg "#ffffff", bgSecondary "#f8fafc", text "#0f172a", textSecondary "#334155")
+  - default/generic: themeMode "light", custom colors matching industry
   
   Return ONLY valid JSON matching this exact structure:
   {
-    "tailwindPrimaryColor": "emerald-600", 
-    "tailwindBgColor": "zinc-950", 
+    "themeMode": "light",
+    "colors": {
+      "primary": "#0d9488",
+      "primaryLight": "#f0fdfa",
+      "primaryDark": "#0f766e",
+      "accent": "#f59e0b",
+      "bg": "#ffffff",
+      "bgSecondary": "#f8fafc",
+      "text": "#0f172a",
+      "textSecondary": "#475569"
+    },
     "fontLink": "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Outfit:wght@400;700&display=swap",
     "fontFamilyHeading": "font-['Outfit']",
     "fontFamilyBody": "font-['Plus_Jakarta_Sans']",
-    "imageKeywords": ["modern dental clinic", "dentist operatory", "teeth whitening"],
-    "componentSelection": {
-      "hero": "HeroGlass",
-      "services": "ServicesBento",
-      "reviews": "ReviewsInfiniteMarquee",
-      "contact": "ContactSplit"
-    }
+    "imageKeywords": ["modern dental clinic", "dentist operatory", "teeth whitening"]
   }
   `;
 
   const textResult = await callLLM(prompt, 'json');
   try {
     const cleanedText = textResult.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(cleanedText);
+    const strategy = JSON.parse(cleanedText);
+    
+    // Add default colors and themeMode if missing
+    strategy.themeMode = strategy.themeMode || 'light';
+    strategy.colors = strategy.colors || {
+      primary: '#0d9488',
+      primaryLight: '#f0fdfa',
+      primaryDark: '#0f766e',
+      accent: '#f59e0b',
+      bg: '#ffffff',
+      bgSecondary: '#f8fafc',
+      text: '#0f172a',
+      textSecondary: '#475569'
+    };
+    
+    // Maintain backwards compatibility
+    strategy.tailwindPrimaryColor = strategy.colors.primary;
+    strategy.componentSelection = {
+      hero: 'InlineHero',
+      services: 'InlineServices',
+      reviews: 'InlineReviews',
+      contact: 'InlineContact'
+    };
+    
+    return strategy;
   } catch (err) {
     console.error('[DirectorAgent] JSON Parse Error:', err, textResult);
-    throw new Error('Failed to parse brand strategy JSON');
+    // Safe fallback branding strategy
+    return {
+      themeMode: 'light',
+      colors: {
+        primary: '#0d9488',
+        primaryLight: '#f0fdfa',
+        primaryDark: '#0f766e',
+        accent: '#f59e0b',
+        bg: '#ffffff',
+        bgSecondary: '#f8fafc',
+        text: '#0f172a',
+        textSecondary: '#475569'
+      },
+      tailwindPrimaryColor: '#0d9488',
+      fontLink: "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Outfit:wght@400;700&display=swap",
+      fontFamilyHeading: "font-['Outfit']",
+      fontFamilyBody: "font-['Plus_Jakarta_Sans']",
+      imageKeywords: ['modern business'],
+      componentSelection: {
+        hero: 'InlineHero',
+        services: 'InlineServices',
+        reviews: 'InlineReviews',
+        contact: 'InlineContact'
+      }
+    };
   }
 }
 
@@ -684,6 +728,9 @@ const navLinks = [
   { name: 'Book Now', href: import.meta.env.BASE_URL + 'book' },
   { name: 'Contact', href: import.meta.env.BASE_URL + 'contact' },
 ];
+const enableWhatsApp = ${enableWhatsApp};
+const waUrlPhone = "${waUrlPhone}";
+const copy = ${JSON.stringify(copy)};
 ---
 <!doctype html>
 <html lang="en">
@@ -695,53 +742,121 @@ const navLinks = [
     <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="${strategy.fontLink}" rel="stylesheet">
     <ClientRouter />
+    <style is:inline>
+      :root {
+        --primary: ${strategy.colors.primary};
+        --primary-light: ${strategy.colors.primaryLight};
+        --primary-dark: ${strategy.colors.primaryDark};
+        --accent: ${strategy.colors.accent};
+        --bg-main: ${strategy.colors.bg};
+        --bg-sec: ${strategy.colors.bgSecondary};
+        --text-main: ${strategy.colors.text};
+        --text-sec: ${strategy.colors.textSecondary};
+      }
+    </style>
   </head>
-  <body class="bg-zinc-950 text-zinc-100 ${strategy.fontFamilyBody || 'font-sans'} antialiased selection:bg-${strategy.tailwindPrimaryColor || 'amber-500'} selection:text-black">
-    <header class="sticky top-0 z-50 bg-zinc-950/80 backdrop-blur-md border-b border-white/5">
+  <body class="bg-[var(--bg-main)] text-[var(--text-main)] ${strategy.fontFamilyBody || 'font-sans'} antialiased selection:bg-[var(--primary)] selection:text-white transition-colors duration-300">
+    <header class="sticky top-0 z-50 bg-[var(--bg-main)]/90 backdrop-blur-md border-b border-[var(--text-main)]/5 shadow-sm">
       <nav class="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-        <a href={import.meta.env.BASE_URL} class="text-xl md:text-2xl font-bold ${strategy.fontFamilyHeading || 'font-serif'} text-transparent bg-clip-text bg-gradient-to-r from-white via-zinc-200 to-${strategy.tailwindPrimaryColor || 'amber-500'} tracking-wide truncate mr-4">{cleanBizName}</a>
+        <a href={import.meta.env.BASE_URL} class="text-xl md:text-2xl font-bold ${strategy.fontFamilyHeading || 'font-serif'} text-[var(--primary)] tracking-wide truncate mr-4">{cleanBizName}</a>
+        
         <ul class="hidden xl:flex space-x-8">
           {navLinks.map((link) => (
-            <li><a href={link.href} class="text-sm font-medium text-zinc-300 hover:text-${strategy.tailwindPrimaryColor || 'amber-500'} transition-colors duration-200 rounded p-1">{link.name}</a></li>
+            <li><a href={link.href} class="text-sm font-semibold text-[var(--text-sec)] hover:text-[var(--primary)] transition-colors duration-200">{link.name}</a></li>
           ))}
         </ul>
-        <button id="mobile-menu-btn" class="xl:hidden flex flex-col gap-1.5 p-2 -mr-2" aria-label="Toggle menu">
-          <span class="block w-6 h-0.5 bg-white transition-transform" id="bar1"></span>
-          <span class="block w-6 h-0.5 bg-white transition-opacity" id="bar2"></span>
-          <span class="block w-6 h-0.5 bg-white transition-transform" id="bar3"></span>
+
+        <div class="hidden xl:flex items-center gap-6">
+          <a href={\`tel:\${phone}\`} class="flex items-center gap-2 text-sm font-semibold text-[var(--text-main)] hover:text-[var(--primary)] transition-colors">
+            <svg class="w-4 h-4 text-[var(--primary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+            </svg>
+            {phone}
+          </a>
+          <a href={import.meta.env.BASE_URL + 'book'} class="inline-flex items-center justify-center px-5 py-2.5 text-sm font-bold text-white bg-[var(--primary)] hover:bg-[var(--primary-dark)] rounded-full transition-all shadow-md hover:shadow-lg hover:-translate-y-0.5">
+            Book Appointment
+          </a>
+        </div>
+
+        <button id="mobile-menu-btn" class="xl:hidden flex flex-col gap-1.5 p-2 -mr-2 text-[var(--text-main)]" aria-label="Toggle menu">
+          <span class="block w-6 h-0.5 bg-current transition-transform" id="bar1"></span>
+          <span class="block w-6 h-0.5 bg-current transition-opacity" id="bar2"></span>
+          <span class="block w-6 h-0.5 bg-current transition-transform" id="bar3"></span>
         </button>
       </nav>
-      <div id="mobile-menu" class="hidden xl:hidden bg-zinc-950/95 backdrop-blur-xl border-t border-white/5">
+      <div id="mobile-menu" class="hidden xl:hidden bg-[var(--bg-main)] border-t border-[var(--text-main)]/5 shadow-inner">
         <ul class="flex flex-col px-6 py-6 space-y-4">
           {navLinks.map((link) => (
-            <li><a href={link.href} class="text-lg font-medium text-zinc-200 hover:text-${strategy.tailwindPrimaryColor || 'amber-500'} transition-colors block py-2">{link.name}</a></li>
+            <li><a href={link.href} class="text-lg font-semibold text-[var(--text-sec)] hover:text-[var(--primary)] transition-colors block py-2">{link.name}</a></li>
           ))}
+          <li class="pt-4 border-t border-[var(--text-main)]/5 flex flex-col gap-4">
+            <a href={\`tel:\${phone}\`} class="flex items-center gap-2 text-base font-semibold text-[var(--text-main)] hover:text-[var(--primary)]">
+              <svg class="w-5 h-5 text-[var(--primary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+              </svg>
+              {phone}
+            </a>
+            <a href={import.meta.env.BASE_URL + 'book'} class="inline-flex items-center justify-center px-5 py-3 text-base font-bold text-white bg-[var(--primary)] hover:bg-[var(--primary-dark)] rounded-xl transition-colors text-center w-full">
+              Book Appointment
+            </a>
+          </li>
         </ul>
       </div>
     </header>
     <main><slot /></main>
-    <footer class="bg-zinc-900/60 border-t border-white/5 py-12 mt-24">
-      <div class="max-w-7xl mx-auto px-6 text-center grid gap-y-4 text-zinc-400">
-        <p class="text-lg font-bold ${strategy.fontFamilyHeading || 'font-serif'} text-white">{cleanBizName}</p>
-        <address class="not-italic text-sm">{address}</address>
-        <p class="text-sm">Call us: <a href={\`tel:\${phone}\`} class="text-${strategy.tailwindPrimaryColor || 'amber-500'} hover:underline">{phone}</a></p>
-        <p class="text-xs text-zinc-600 mt-4">&copy; {new Date().getFullYear()} {cleanBizName}. All rights reserved.</p>
+    <footer class="bg-[var(--bg-sec)] border-t border-[var(--text-main)]/5 py-16 mt-24">
+      <div class="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12">
+        <div class="space-y-4">
+          <p class="text-xl font-bold ${strategy.fontFamilyHeading || 'font-serif'} text-[var(--primary)]">{cleanBizName}</p>
+          <p class="text-sm text-[var(--text-sec)] leading-relaxed">Delivering premium, high-quality professional services tailored to your individual needs.</p>
+        </div>
+        <div class="space-y-4">
+          <h4 class="text-sm font-bold uppercase tracking-wider text-[var(--text-main)]">Quick Links</h4>
+          <ul class="space-y-2">
+            {navLinks.slice(0, 5).map(link => (
+              <li><a href={link.href} class="text-sm text-[var(--text-sec)] hover:text-[var(--primary)] transition-colors">{link.name}</a></li>
+            ))}
+          </ul>
+        </div>
+        <div class="space-y-4">
+          <h4 class="text-sm font-bold uppercase tracking-wider text-[var(--text-main)]">Services</h4>
+          <ul class="space-y-2">
+            {copy.services.slice(0, 4).map((s) => (
+              <li><a href={import.meta.env.BASE_URL + 'services'} class="text-sm text-[var(--text-sec)] hover:text-[var(--primary)] transition-colors">{s.title}</a></li>
+            ))}
+          </ul>
+        </div>
+        <div class="space-y-4">
+          <h4 class="text-sm font-bold uppercase tracking-wider text-[var(--text-main)]">Contact</h4>
+          <ul class="space-y-3">
+            <li class="flex items-start gap-3 text-sm text-[var(--text-sec)]">
+              <svg class="w-5 h-5 text-[var(--primary)] flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <span>{address}</span>
+            </li>
+            <li class="flex items-center gap-3 text-sm text-[var(--text-sec)]">
+              <svg class="w-5 h-5 text-[var(--primary)] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+              </svg>
+              <a href={\`tel:\${phone}\`} class="hover:text-[var(--primary)] transition-colors">{phone}</a>
+            </li>
+          </ul>
+        </div>
       </div>
     </footer>
 
-    {/* Floating WhatsApp FAB */}
-    {${enableWhatsApp} && (
+    <!-- Floating WhatsApp FAB -->
+    {enableWhatsApp && (
       <a
-        href={\`https://wa.me/${waUrlPhone}?text=Hi,%20I'm%20interested%20in%20your%20services.\`}
+        href={\`https://wa.me/\${waUrlPhone}?text=Hi,%20I'm%20interested%20in%20your%20services.\`}
         target="_blank"
         rel="noopener noreferrer"
-        class="fixed bottom-6 right-6 z-50 flex items-center justify-center w-14 h-14 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full shadow-2xl hover:scale-110 active:scale-95 transition-all duration-300 group"
+        class="fixed bottom-6 right-6 z-50 flex items-center justify-center w-14 h-14 bg-emerald-500 hover:bg-emerald-600 text-white rounded-full shadow-2xl hover:scale-110 active:scale-95 transition-all duration-300 group animate-bounce-slow"
         aria-label="Chat on WhatsApp"
       >
-        <svg class="w-7 h-7 fill-current" viewBox="0 0 24 24">
-          <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946C.06 5.348 5.397.01 12.008.01c3.202.001 6.212 1.246 8.477 3.514 2.266 2.268 3.507 5.28 3.505 8.484-.004 6.657-5.34 11.997-11.953 11.997-2.005-.001-3.973-.502-5.724-1.455L0 24zm6.59-4.846c1.6.95 3.188 1.449 4.825 1.451 5.436 0 9.86-4.42 9.864-9.864.002-2.637-1.03-5.115-2.908-6.995-1.878-1.88-4.357-2.912-6.997-2.914-5.443 0-9.866 4.42-9.871 9.866-.002 1.716.447 3.39 1.298 4.877L1.93 21.13l4.717-1.976zm11.378-5.305c-.328-.164-1.94-.959-2.242-1.07-.302-.11-.522-.164-.742.164-.22.329-.85.11-.85.11s-.577-.643-1.07-1.135c-.41-.41-.75-.863-.878-1.082-.128-.218-.014-.337.096-.445.099-.098.22-.258.329-.387.11-.13.146-.22.22-.365.074-.146.037-.274-.018-.384-.056-.11-.522-1.258-.716-1.724-.19-.456-.399-.393-.549-.4l-.467-.008c-.165 0-.434.062-.66.31-.225.249-.86.84-.86 2.048 0 1.208.879 2.376.999 2.54.12.164 1.73 2.642 4.19 3.706.585.253 1.042.404 1.398.517.589.187 1.125.161 1.549.098.473-.07 1.94-.793 2.213-1.52.274-.727.274-1.352.192-1.482-.08-.13-.302-.239-.63-.403z"/>
-        </svg>
-        <span class="absolute right-16 bg-zinc-900 text-white text-xs font-semibold px-3 py-1.5 rounded-lg border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap shadow-xl">Chat with us</span>
+        <svg class="w-7 h-7" fill="currentColor" viewBox="0 0 24 24"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zM6.597 17.585l.389.231c1.554.922 3.356 1.409 5.187 1.409 5.568.001 10.101-4.531 10.101-10.101-.001-5.569-4.532-10.102-10.101-10.102-5.568 0-10.101 4.533-10.101 10.102 0 1.834.488 3.636 1.41 5.189l.231.39-1.008 3.684 3.685-1.008z"/></svg>
       </a>
     )}
 
@@ -754,43 +869,247 @@ const navLinks = [
   </body>
 </html>`;
 
-  const heroComponent = strategy.componentSelection.hero;
-  const reviewsComponent = (strategy.componentSelection.reviews === 'ReviewsMarquee' || strategy.componentSelection.reviews === 'ReviewsInfiniteMarquee')
-    ? strategy.componentSelection.reviews
-    : 'ReviewsInfiniteMarquee';
-    
   const indexAstro = `---
 import Layout from '../layouts/Layout.astro';
-import { ${heroComponent} } from '../components/ui/${heroComponent}.jsx';
-import { ${reviewsComponent} } from '../components/ui/${reviewsComponent}.jsx';
 const images = ${JSON.stringify(images)};
 const copy = ${JSON.stringify(copy)};
+const phone = "${phone}";
+const heroImage = images[0] || 'https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&q=80';
 ---
 <Layout title="Home">
-  <${heroComponent} title={copy.home.heroTitle} subtitle={copy.home.heroSubtitle} cta={copy.home.heroCta} image={images[0]} client:load />
-  
-  <section class="py-24 px-6 border-t border-white/5 bg-zinc-950">
-    <div class="max-w-6xl mx-auto">
-      <div class="text-center mb-16">
-        <h2 class="text-4xl md:text-5xl font-bold ${strategy.fontFamilyHeading || 'font-serif'} text-transparent bg-clip-text bg-gradient-to-r from-white via-zinc-200 to-zinc-500 mb-4">Why Choose Us</h2>
-        <p class="text-zinc-400 max-w-2xl mx-auto leading-relaxed">We stand out by delivering custom quality and unmatched value tailored to your precise needs.</p>
+  <section class="relative overflow-hidden py-20 lg:py-32 bg-[var(--bg-main)]">
+    <div class="max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+      <!-- Left Column: Content -->
+      <div class="flex flex-col items-start text-left space-y-8 max-w-2xl animate-fade-in">
+        <!-- Floating Badge -->
+        <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[var(--primary-light)] text-[var(--primary-dark)] text-xs font-bold uppercase tracking-wider border border-[var(--primary)]/10">
+          <span class="w-2.5 h-2.5 rounded-full bg-[var(--primary)] animate-pulse"></span>
+          5.0 ⭐ Premium Rated Clinic
+        </div>
+        
+        <h1 class="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight ${strategy.fontFamilyHeading || 'font-serif'} text-[var(--text-main)] leading-[1.15]">
+          {copy.home.heroTitle}
+        </h1>
+        
+        <p class="text-base md:text-lg text-[var(--text-sec)] leading-relaxed font-light">
+          {copy.home.heroSubtitle}
+        </p>
+        
+        <div class="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
+          <a
+            href={import.meta.env.BASE_URL + 'book'}
+            class="px-8 py-4 bg-[var(--primary)] hover:bg-[var(--primary-dark)] text-white text-base font-bold rounded-full text-center transition-all shadow-md hover:shadow-xl hover:-translate-y-0.5"
+          >
+            {copy.home.heroCta}
+          </a>
+          <a
+            href={import.meta.env.BASE_URL + 'services'}
+            class="px-8 py-4 bg-[var(--bg-sec)] hover:bg-[var(--primary-light)] text-[var(--text-main)] border border-[var(--text-main)]/10 text-base font-bold rounded-full text-center transition-all"
+          >
+            Explore Services
+          </a>
+        </div>
+
+        <!-- Trust Badges -->
+        <div class="pt-6 border-t border-[var(--text-main)]/5 w-full flex flex-wrap gap-8 text-[var(--text-sec)]">
+          <div>
+            <span class="block text-2xl font-bold text-[var(--primary)]">100%</span>
+            <span class="text-xs">Satisfaction Guaranteed</span>
+          </div>
+          <div>
+            <span class="block text-2xl font-bold text-[var(--primary)]">5.0 ⭐</span>
+            <span class="text-xs">Based on 43 Google Reviews</span>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Right Column: Image and overlays -->
+      <div class="relative w-full">
+        <!-- Main Image Container -->
+        <div class="relative z-10 rounded-2xl overflow-hidden shadow-2xl border-4 border-white dark:border-zinc-800 bg-[var(--bg-sec)] aspect-[4/3] md:aspect-[16/10] lg:aspect-[4/3]">
+          <img src={heroImage} alt="Premium Service" class="w-full h-full object-cover hover:scale-105 transition-transform duration-700" />
+        </div>
+        
+        <!-- Background decorative glow -->
+        <div class="absolute -top-10 -right-10 w-72 h-72 rounded-full bg-[var(--primary)]/10 blur-[80px] -z-10 pointer-events-none"></div>
+        <div class="absolute -bottom-10 -left-10 w-72 h-72 rounded-full bg-[var(--accent)]/10 blur-[80px] -z-10 pointer-events-none"></div>
+        
+        <!-- Floating badge overlay -->
+        <div class="absolute -bottom-6 -right-6 z-20 bg-white dark:bg-zinc-900 p-4 rounded-xl shadow-2xl border border-slate-100 dark:border-zinc-800 flex items-center gap-3 animate-bounce-slow">
+          <div class="w-10 h-10 rounded-full bg-[var(--primary-light)] flex items-center justify-center">
+            <svg class="w-5 h-5 text-[var(--primary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+          </div>
+          <div>
+            <p class="text-xs text-slate-400">Verified Quality</p>
+            <p class="text-sm font-bold text-slate-900 dark:text-white">Trusted Experts</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  {/* Why Choose Us Section */}
+  <section class="py-24 px-6 border-t border-[var(--text-main)]/5 bg-[var(--bg-sec)]">
+    <div class="max-w-7xl mx-auto">
+      <div class="text-center mb-16 max-w-2xl mx-auto space-y-4">
+        <h2 class="text-3xl md:text-4xl font-bold tracking-tight ${strategy.fontFamilyHeading || 'font-serif'} text-[var(--text-main)]">Why Choose Us</h2>
+        <div class="w-16 h-1 bg-[var(--primary)] mx-auto rounded-full"></div>
+        <p class="text-[var(--text-sec)] leading-relaxed">We stand out by delivering custom quality and unmatched value tailored to your precise needs.</p>
       </div>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-        {copy.whyChooseUs.map((item) => (
-          <div class="p-8 rounded-2xl bg-white/5 border border-white/10 hover:border-${strategy.tailwindPrimaryColor || 'amber-500'}/30 transition-all duration-500 backdrop-blur-md">
-            <h3 class="text-xl font-bold text-white mb-3 ${strategy.fontFamilyHeading || 'font-serif'}">{item.title}</h3>
-            <p class="text-zinc-400 text-sm leading-relaxed">{item.description}</p>
+        {copy.whyChooseUs.map((item, idx) => (
+          <div class="p-8 rounded-2xl bg-[var(--bg-main)] border border-[var(--text-main)]/5 hover:border-[var(--primary)]/30 hover:-translate-y-1.5 transition-all duration-300 shadow-sm hover:shadow-md">
+            <div class="w-12 h-12 rounded-full bg-[var(--primary-light)] flex items-center justify-center mb-6">
+              {idx === 0 && (
+                <svg class="w-6 h-6 text-[var(--primary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                </svg>
+              )}
+              {idx === 1 && (
+                <svg class="w-6 h-6 text-[var(--primary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              )}
+              {idx >= 2 && (
+                <svg class="w-6 h-6 text-[var(--primary)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              )}
+            </div>
+            <h3 class="text-xl font-bold text-[var(--text-main)] mb-3 ${strategy.fontFamilyHeading || 'font-serif'}">{item.title}</h3>
+            <p class="text-[var(--text-sec)] text-sm leading-relaxed">{item.description}</p>
           </div>
         ))}
       </div>
     </div>
   </section>
-  
-  <section class="py-24 px-6 bg-zinc-900/40 border-t border-white/5">
-    <div class="max-w-6xl mx-auto text-center">
-      <h2 class="text-3xl font-bold ${strategy.fontFamilyHeading || 'font-serif'} text-white mb-16">Client Testimonials</h2>
-      <${reviewsComponent} reviews={copy.reviews} client:load />
+
+  {/* Services Preview Section */}
+  <section class="py-24 px-6 bg-[var(--bg-main)]">
+    <div class="max-w-7xl mx-auto">
+      <div class="text-center mb-16 max-w-2xl mx-auto space-y-4">
+        <h2 class="text-3xl md:text-4xl font-bold tracking-tight ${strategy.fontFamilyHeading || 'font-serif'} text-[var(--text-main)]">Our Services</h2>
+        <div class="w-16 h-1 bg-[var(--primary)] mx-auto rounded-full"></div>
+        <p class="text-[var(--text-sec)]">Premium, professional solutions designed to deliver exceptional value.</p>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+        {copy.services.slice(0, 3).map((service, i) => {
+          const serviceImg = images[(i + 1) % images.length] || images[0];
+          return (
+            <div class="group flex flex-col bg-[var(--bg-sec)] rounded-2xl overflow-hidden border border-[var(--text-main)]/5 hover:border-[var(--primary)]/20 shadow-sm hover:shadow-lg transition-all duration-300">
+              <div class="h-56 overflow-hidden relative">
+                <img src={serviceImg} alt={service.title} class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                <div class="absolute inset-0 bg-gradient-to-t from-[var(--bg-sec)] via-transparent to-transparent opacity-60"></div>
+              </div>
+              <div class="p-8 flex flex-col flex-grow justify-between space-y-6">
+                <div class="space-y-3">
+                  <h3 class="text-2xl font-bold text-[var(--text-main)] ${strategy.fontFamilyHeading || 'font-serif'} group-hover:text-[var(--primary)] transition-colors">{service.title}</h3>
+                  <p class="text-[var(--text-sec)] text-sm leading-relaxed line-clamp-3">{service.description}</p>
+                </div>
+                
+                {service.benefits && (
+                  <ul class="space-y-2 pt-2 border-t border-[var(--text-main)]/5">
+                    {service.benefits.slice(0, 2).map((benefit) => (
+                      <li class="flex items-center text-sm text-[var(--text-sec)] gap-2">
+                        <svg class="w-4 h-4 text-[var(--primary)] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span class="truncate">{benefit}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <a href={import.meta.env.BASE_URL + 'services'} class="inline-flex items-center gap-2 text-sm font-bold text-[var(--primary)] hover:text-[var(--primary-dark)] group/link transition-colors pt-2">
+                  Learn More
+                  <svg class="w-4 h-4 transform group-hover/link:translate-x-1 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+                  </svg>
+                </a>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div class="text-center mt-12">
+        <a href={import.meta.env.BASE_URL + 'services'} class="inline-flex items-center justify-center px-8 py-3.5 border border-[var(--primary)] hover:bg-[var(--primary-light)] text-[var(--primary-dark)] font-bold rounded-full transition-all">
+          View All Services
+        </a>
+      </div>
     </div>
+  </section>
+
+  {/* Client Testimonials Section */}
+  <section class="py-24 px-6 bg-[var(--bg-sec)]">
+    <div class="max-w-7xl mx-auto">
+      <div class="text-center mb-16 max-w-2xl mx-auto space-y-4">
+        <h2 class="text-3xl md:text-4xl font-bold tracking-tight ${strategy.fontFamilyHeading || 'font-serif'} text-[var(--text-main)]">Client Reviews</h2>
+        <div class="w-16 h-1 bg-[var(--primary)] mx-auto rounded-full"></div>
+        <p class="text-[var(--text-sec)]">Don't take our word for it. Read honest feedback from our valued clients.</p>
+      </div>
+      
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+        {copy.reviews.slice(0, 3).map((review) => {
+          const initial = (review.author || 'C').charAt(0);
+          return (
+            <div class="p-8 rounded-2xl bg-[var(--bg-main)] border border-[var(--text-main)]/5 flex flex-col justify-between space-y-6 shadow-sm hover:shadow-md transition-all duration-300">
+              <div class="space-y-4">
+                {/* 5 Stars */}
+                <div class="flex gap-1 text-[var(--accent)]">
+                  {[...Array(5)].map(() => (
+                    <svg class="w-5 h-5 fill-current" viewBox="0 0 20 20">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                  ))}
+                </div>
+                <p class="text-[var(--text-sec)] text-sm italic leading-relaxed">"{review.text}"</p>
+              </div>
+              <div class="flex items-center gap-3 pt-4 border-t border-[var(--text-main)]/5">
+                <div class="w-10 h-10 rounded-full bg-[var(--primary)] text-white font-bold flex items-center justify-center text-sm shadow-inner">{initial}</div>
+                <div>
+                  <h4 class="text-sm font-bold text-[var(--text-main)]">{review.author}</h4>
+                  <p class="text-xs text-[var(--text-sec)]">{review.company || 'Verified Customer'}</p>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      
+      <div class="text-center mt-12">
+        <a href={import.meta.env.BASE_URL + 'reviews'} class="inline-flex items-center gap-2 text-sm font-bold text-[var(--primary)] hover:text-[var(--primary-dark)] transition-colors">
+          Read All Reviews
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3" />
+          </svg>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  {/* Dynamic conversion band CTA */}
+  <section class="py-20 px-6 text-center bg-gradient-to-r from-[var(--primary)] to-[var(--primary-dark)] text-white relative overflow-hidden">
+    <div class="max-w-4xl mx-auto space-y-8 relative z-10">
+      <h2 class="text-3xl md:text-5xl font-extrabold tracking-tight ${strategy.fontFamilyHeading || 'font-serif'} drop-shadow-md">
+        Ready to Experience the Difference?
+      </h2>
+      <p class="text-white/80 max-w-xl mx-auto text-base md:text-lg">
+        Secure your booking online in seconds or give us a call to speak with our experts.
+      </p>
+      <div class="flex flex-col sm:flex-row justify-center items-center gap-4">
+        <a href={import.meta.env.BASE_URL + 'book'} class="w-full sm:w-auto px-8 py-4 bg-white text-[var(--primary-dark)] hover:bg-slate-50 font-bold rounded-full transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5 animate-pulse-slow">
+          Schedule Appointment
+        </a>
+        <a href={\`tel:\${phone}\`} class="w-full sm:w-auto px-8 py-4 bg-transparent hover:bg-white/10 text-white border border-white/30 font-bold rounded-full transition-all">
+          Call {phone}
+        </a>
+      </div>
+    </div>
+    {/* Floating background decorative shape */}
+    <div class="absolute -top-24 -left-24 w-80 h-80 rounded-full bg-white/5 blur-[50px]"></div>
+    <div class="absolute -bottom-24 -right-24 w-80 h-80 rounded-full bg-white/5 blur-[50px]"></div>
   </section>
 </Layout>`;
 
@@ -798,27 +1117,61 @@ const copy = ${JSON.stringify(copy)};
 import Layout from '../layouts/Layout.astro';
 const images = ${JSON.stringify(images)};
 const copy = ${JSON.stringify(copy)};
+const aboutImage = images[1] || images[0] || 'https://images.unsplash.com/photo-1629909613654-28e377c37b09?auto=format&fit=crop&q=80';
 ---
 <Layout title="About Us">
-  <section class="py-24 px-6 bg-zinc-950 relative overflow-hidden">
-    <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-zinc-900 via-black to-black -z-10"></div>
-    <div class="max-w-6xl mx-auto">
-      <h1 class="text-5xl md:text-7xl font-bold text-center ${strategy.fontFamilyHeading || 'font-serif'} text-transparent bg-clip-text bg-gradient-to-r from-white via-zinc-200 to-zinc-500 mb-16 tracking-tight">{copy.about.headline}</h1>
+  <section class="py-20 lg:py-28 bg-[var(--bg-main)]">
+    <div class="max-w-7xl mx-auto px-6 space-y-20 animate-fade-in">
+      <!-- Header -->
+      <div class="text-center max-w-3xl mx-auto space-y-4">
+        <h1 class="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight ${strategy.fontFamilyHeading || 'font-serif'} text-[var(--text-main)] leading-tight">
+          {copy.about.headline}
+        </h1>
+        <div class="w-16 h-1 bg-[var(--primary)] mx-auto rounded-full"></div>
+      </div>
+
+      <!-- Main Layout Split -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
+        <!-- Story -->
         <div class="space-y-8">
-          <div class="p-8 rounded-3xl bg-white/5 border border-white/10 backdrop-blur-md hover:border-${strategy.tailwindPrimaryColor || 'amber-500'}/30 transition-all duration-500">
-            <h2 class="text-3xl font-bold ${strategy.fontFamilyHeading || 'font-serif'} text-${strategy.tailwindPrimaryColor || 'amber-500'} mb-4">Our Story</h2>
-            <p class="text-zinc-300 leading-relaxed text-pretty">{copy.about.story}</p>
+          <div class="p-8 md:p-10 rounded-2xl bg-[var(--bg-sec)] border border-[var(--text-main)]/5 shadow-sm space-y-6">
+            <h2 class="text-2xl md:text-3xl font-bold ${strategy.fontFamilyHeading || 'font-serif'} text-[var(--primary)]">Our Story</h2>
+            <p class="text-[var(--text-sec)] leading-relaxed text-pretty text-base font-light">{copy.about.story}</p>
+            
+            <!-- Dynamic highlights -->
+            <ul class="space-y-3 pt-4 border-t border-[var(--text-main)]/5">
+              <li class="flex items-center gap-3 text-sm text-[var(--text-main)] font-medium">
+                <svg class="w-5 h-5 text-[var(--primary)] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                State-of-the-Art Professional Facilities
+              </li>
+              <li class="flex items-center gap-3 text-sm text-[var(--text-main)] font-medium">
+                <svg class="w-5 h-5 text-[var(--primary)] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                Highly Trained & Experienced Staff
+              </li>
+              <li class="flex items-center gap-3 text-sm text-[var(--text-main)] font-medium">
+                <svg class="w-5 h-5 text-[var(--primary)] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+                Patient-Centric Approach to Quality Care
+              </li>
+            </ul>
           </div>
         </div>
+
+        <!-- Visuals and Mission -->
         <div class="space-y-8">
-          <div class="relative rounded-3xl overflow-hidden group border border-white/10 shadow-2xl">
-            <img src={images[1] || images[0]} alt="About Us" class="w-full h-auto object-cover group-hover:scale-105 transition-transform duration-700" />
-            <div class="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent"></div>
+          <div class="relative rounded-2xl overflow-hidden shadow-2xl border-4 border-white dark:border-zinc-800 bg-[var(--bg-sec)] aspect-[16/10] group">
+            <img src={aboutImage} alt="Our team and facility" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+            <div class="absolute inset-0 bg-gradient-to-t from-[var(--bg-main)]/30 to-transparent"></div>
           </div>
-          <div class="p-8 rounded-3xl bg-zinc-900/80 border border-white/5 backdrop-blur-md">
-            <h3 class="text-2xl font-bold ${strategy.fontFamilyHeading || 'font-serif'} text-zinc-100 mb-2">Our Mission</h3>
-            <p class="text-zinc-300 leading-relaxed text-pretty font-light">{copy.about.mission}</p>
+          
+          <div class="p-8 rounded-2xl bg-gradient-to-r from-[var(--primary)]/10 to-[var(--primary-dark)]/5 border-l-4 border-[var(--primary)] shadow-sm">
+            <h3 class="text-lg font-bold ${strategy.fontFamilyHeading || 'font-serif'} text-[var(--primary-dark)] mb-2 uppercase tracking-wide">Our Mission</h3>
+            <p class="text-[var(--text-main)] leading-relaxed text-lg font-medium">{copy.about.mission}</p>
           </div>
         </div>
       </div>
@@ -826,56 +1179,73 @@ const copy = ${JSON.stringify(copy)};
   </section>
 </Layout>`;
 
-  const servicesComponent = strategy.componentSelection.services;
   const servicesAstro = `---
 import Layout from '../layouts/Layout.astro';
-import { ${servicesComponent} } from '../components/ui/${servicesComponent}.jsx';
 const images = ${JSON.stringify(images)};
 const copy = ${JSON.stringify(copy)};
 ---
 <Layout title="Our Services">
-  <section class="py-24 px-6 bg-zinc-950">
-    <div class="max-w-6xl mx-auto">
-      <div class="text-center mb-16">
-        <h1 class="text-5xl md:text-7xl font-bold ${strategy.fontFamilyHeading || 'font-serif'} text-transparent bg-clip-text bg-gradient-to-r from-white via-zinc-200 to-zinc-500 mb-4 tracking-tight">Our Services</h1>
-        <p class="text-zinc-400 max-w-2xl mx-auto leading-relaxed">Discover our collection of premium, professional services designed to deliver exceptional value.</p>
+  <section class="py-20 lg:py-28 bg-[var(--bg-main)]">
+    <div class="max-w-7xl mx-auto px-6 space-y-20 animate-fade-in">
+      <!-- Header -->
+      <div class="text-center max-w-3xl mx-auto space-y-4">
+        <h1 class="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight ${strategy.fontFamilyHeading || 'font-serif'} text-[var(--text-main)]">Our Services</h1>
+        <div class="w-16 h-1 bg-[var(--primary)] mx-auto rounded-full"></div>
+        <p class="text-[var(--text-sec)] text-base md:text-lg leading-relaxed">Discover our collection of premium, professional services designed to deliver exceptional value.</p>
       </div>
-      <${servicesComponent} services={copy.services.map((s, i) => ({ ...s, image: images[(i + 2) % images.length] }))} primaryColor="${strategy.tailwindPrimaryColor || 'emerald-600'}" client:load />
-    </div>
-  </section>
 
-  <section class="py-24 px-6 bg-zinc-900/40 border-t border-white/5">
-    <div class="max-w-6xl mx-auto">
-      <div class="text-center mb-16">
-        <h2 class="text-4xl font-bold ${strategy.fontFamilyHeading || 'font-serif'} text-white mb-4">Detailed Breakdown</h2>
-        <p class="text-zinc-400">Everything you need to know about our specialized offerings.</p>
-      </div>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-        {copy.services.map((service) => (
-          <div class="p-8 rounded-3xl bg-zinc-950 border border-white/5 flex flex-col justify-between hover:border-${strategy.tailwindPrimaryColor || 'amber-500'}/30 transition-all duration-300">
-            <div>
-              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
-                <h3 class="text-2xl font-semibold text-white ${strategy.fontFamilyHeading || 'font-serif'}">{service.title}</h3>
-                {service.whoNeedsIt && (
-                  <span class="text-xs font-medium px-3 py-1 bg-white/5 rounded-full text-zinc-400 w-fit">{service.whoNeedsIt}</span>
-                )}
+      <!-- Services List -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {copy.services.map((service, i) => {
+          const serviceImg = images[(i + 2) % images.length] || images[0];
+          return (
+            <div class="group flex flex-col bg-[var(--bg-sec)] rounded-2xl overflow-hidden border border-[var(--text-main)]/5 hover:border-[var(--primary)]/20 shadow-sm hover:shadow-lg transition-all duration-300">
+              <div class="h-60 overflow-hidden relative">
+                <img src={serviceImg} alt={service.title} class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                <div class="absolute inset-0 bg-gradient-to-t from-[var(--bg-sec)] via-transparent to-transparent opacity-60"></div>
               </div>
-              <p class="text-zinc-400 text-sm leading-relaxed mb-6">{service.description}</p>
-              {service.benefits && (
-                <ul class="space-y-2">
-                  {service.benefits.map((benefit) => (
-                    <li class="flex items-center text-sm text-zinc-300 gap-2">
-                      <svg class="w-4 h-4 text-${strategy.tailwindPrimaryColor || 'amber-500'} flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
-                      </svg>
-                      {benefit}
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <div class="p-8 flex flex-col flex-grow justify-between space-y-6">
+                <div class="space-y-3">
+                  <div class="flex justify-between items-start gap-2">
+                    <h3 class="text-xl md:text-2xl font-bold text-[var(--text-main)] ${strategy.fontFamilyHeading || 'font-serif'} group-hover:text-[var(--primary)] transition-colors">{service.title}</h3>
+                    {service.whoNeedsIt && (
+                      <span class="text-[10px] font-semibold tracking-wider uppercase px-2.5 py-1 bg-[var(--primary-light)] text-[var(--primary-dark)] rounded-full border border-[var(--primary)]/10">{service.whoNeedsIt.split(' ')[0]}</span>
+                    )}
+                  </div>
+                  <p class="text-[var(--text-sec)] text-sm leading-relaxed">{service.description}</p>
+                </div>
+                
+                {service.benefits && (
+                  <ul class="space-y-2 pt-4 border-t border-[var(--text-main)]/5">
+                    {service.benefits.map((benefit) => (
+                      <li class="flex items-center text-sm text-[var(--text-sec)] gap-2">
+                        <svg class="w-4 h-4 text-[var(--primary)] flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3">
+                          <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span>{benefit}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <a href={import.meta.env.BASE_URL + 'book'} class="inline-flex items-center justify-center w-full py-3 bg-[var(--primary)] hover:bg-[var(--primary-dark)] text-white text-sm font-bold rounded-xl transition-all shadow-sm group-hover:shadow-md">
+                  Book Service
+                </a>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
+      </div>
+
+      <!-- Bottom CTA Section -->
+      <div class="p-8 md:p-12 rounded-2xl bg-[var(--bg-sec)] border border-[var(--text-main)]/5 text-center max-w-4xl mx-auto space-y-6">
+        <h3 class="text-2xl font-bold ${strategy.fontFamilyHeading || 'font-serif'} text-[var(--text-main)]">Not sure which service is right for you?</h3>
+        <p class="text-[var(--text-sec)] max-w-xl mx-auto text-sm leading-relaxed">Book a consultation session with our certified specialists to receive a customized treatment plan tailored to your needs.</p>
+        <div class="pt-4">
+          <a href={import.meta.env.BASE_URL + 'book'} class="inline-flex items-center justify-center px-8 py-3.5 bg-[var(--primary)] hover:bg-[var(--primary-dark)] text-white font-bold rounded-full transition-all shadow-md">
+            Request a Consultation
+          </a>
+        </div>
       </div>
     </div>
   </section>
@@ -883,17 +1253,46 @@ const copy = ${JSON.stringify(copy)};
 
   const reviewsPageAstro = `---
 import Layout from '../layouts/Layout.astro';
-import { ReviewsMasonry } from '../components/ui/ReviewsMasonry.jsx';
 const copy = ${JSON.stringify(copy)};
 ---
-<Layout title="Customer Reviews">
-  <section class="py-24 px-6 bg-zinc-950">
-    <div class="max-w-6xl mx-auto space-y-16">
-      <div class="text-center">
-        <h1 class="text-5xl md:text-7xl font-bold ${strategy.fontFamilyHeading || 'font-serif'} text-transparent bg-clip-text bg-gradient-to-r from-white via-zinc-200 to-zinc-500 mb-4 tracking-tight">Client Reviews</h1>
-        <p class="text-zinc-400 max-w-2xl mx-auto leading-relaxed">Don't take our word for it. Read honest feedback from our valued clients.</p>
+<Layout title="Client Reviews">
+  <section class="py-20 lg:py-28 bg-[var(--bg-main)]">
+    <div class="max-w-7xl mx-auto px-6 space-y-16 animate-fade-in">
+      <!-- Header -->
+      <div class="text-center max-w-2xl mx-auto space-y-4">
+        <h1 class="text-4xl md:text-5xl font-extrabold tracking-tight ${strategy.fontFamilyHeading || 'font-serif'} text-[var(--text-main)]">Client Reviews</h1>
+        <div class="w-16 h-1 bg-[var(--primary)] mx-auto rounded-full"></div>
+        <p class="text-[var(--text-sec)] text-base md:text-lg">Honest feedback and testimonials from our valued patients.</p>
       </div>
-      <ReviewsMasonry reviews={copy.reviews} client:load />
+
+      <!-- Reviews Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {copy.reviews.map((review) => {
+          const initial = (review.author || 'C').charAt(0);
+          return (
+            <div class="p-8 rounded-2xl bg-[var(--bg-sec)] border border-[var(--text-main)]/5 flex flex-col justify-between space-y-6 shadow-sm hover:shadow-md transition-all duration-300">
+              <div class="space-y-4">
+                {/* 5 Stars */}
+                <div class="flex gap-1 text-[var(--accent)]">
+                  {[...Array(5)].map(() => (
+                    <svg class="w-5 h-5 fill-current" viewBox="0 0 20 20">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                    </svg>
+                  ))}
+                </div>
+                <p class="text-[var(--text-sec)] text-sm italic leading-relaxed">"{review.text}"</p>
+              </div>
+              <div class="flex items-center gap-3 pt-4 border-t border-[var(--text-main)]/5">
+                <div class="w-10 h-10 rounded-full bg-[var(--primary)] text-white font-bold flex items-center justify-center text-sm shadow-inner">{initial}</div>
+                <div>
+                  <h4 class="text-sm font-bold text-[var(--text-main)]">{review.author}</h4>
+                  <p class="text-xs text-[var(--text-sec)]">{review.company || 'Google Review'}</p>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   </section>
 </Layout>`;
@@ -904,23 +1303,29 @@ const images = ${JSON.stringify(images)};
 const copy = ${JSON.stringify(copy)};
 ---
 <Layout title="Gallery">
-  <section class="py-24 px-6 bg-zinc-950">
-    <div class="max-w-6xl mx-auto">
-      <div class="text-center mb-16">
-        <h1 class="text-5xl md:text-7xl font-bold ${strategy.fontFamilyHeading || 'font-serif'} text-transparent bg-clip-text bg-gradient-to-r from-white via-zinc-200 to-zinc-500 mb-4 tracking-tight">{copy.gallery.title}</h1>
-        <p class="text-zinc-400 max-w-2xl mx-auto leading-relaxed">{copy.gallery.subtitle}</p>
+  <section class="py-20 lg:py-28 bg-[var(--bg-main)]">
+    <div class="max-w-7xl mx-auto px-6 space-y-16 animate-fade-in">
+      <!-- Header -->
+      <div class="text-center max-w-3xl mx-auto space-y-4">
+        <h1 class="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight ${strategy.fontFamilyHeading || 'font-serif'} text-[var(--text-main)]">
+          {copy.gallery.title}
+        </h1>
+        <div class="w-16 h-1 bg-[var(--primary)] mx-auto rounded-full"></div>
+        <p class="text-[var(--text-sec)] text-base md:text-lg max-w-2xl mx-auto">{copy.gallery.subtitle}</p>
       </div>
+
+      <!-- Masonry Grid -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {images.slice(0, 6).map((image, idx) => {
           const label = copy.gallery.imageLabels[idx % copy.gallery.imageLabels.length] || "Our Facility";
           return (
-            <div class="group relative rounded-3xl overflow-hidden border border-white/5 bg-zinc-900/40 backdrop-blur-md shadow-lg hover:border-${strategy.tailwindPrimaryColor || 'amber-500'}/30 transition-all duration-500">
+            <div class="group relative rounded-2xl overflow-hidden bg-[var(--bg-sec)] border border-[var(--text-main)]/5 shadow-sm hover:shadow-lg hover:-translate-y-1 transition-all duration-300">
               <div class="h-64 overflow-hidden relative">
                 <img src={image} alt={label} class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
-                <div class="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/20 to-transparent opacity-60"></div>
+                <div class="absolute inset-0 bg-gradient-to-t from-[var(--bg-main)]/60 via-[var(--bg-main)]/10 to-transparent opacity-80"></div>
               </div>
               <div class="p-6">
-                <h3 class="text-lg font-semibold text-white tracking-wide">{label}</h3>
+                <h3 class="text-lg font-bold text-[var(--text-main)] tracking-wide group-hover:text-[var(--primary)] transition-colors">{label}</h3>
               </div>
             </div>
           )
@@ -930,46 +1335,109 @@ const copy = ${JSON.stringify(copy)};
   </section>
 </Layout>`;
 
-  const contactComponent = strategy.componentSelection.contact;
   const businessEmail = lead.email || lead.website ? `info@${(lead.website || '').replace(/^https?:\/\//, '').split('/')[0]}` : '';
   const contactAstro = `---
 import Layout from '../layouts/Layout.astro';
-import { ${contactComponent} } from '../components/ui/${contactComponent}.jsx';
 const copy = ${JSON.stringify(copy)};
 const phone = "${phone}";
 const address = "${address}";
 const email = "${businessEmail}";
 ---
 <Layout title="Contact Us">
-  <section class="py-24 px-6 bg-zinc-950">
-    <div class="max-w-6xl mx-auto space-y-16">
-      <div class="text-center">
-        <h1 class="text-5xl md:text-7xl font-bold ${strategy.fontFamilyHeading || 'font-serif'} text-transparent bg-clip-text bg-gradient-to-r from-white via-zinc-200 to-zinc-500 mb-4 tracking-tight">{copy.contact.headline || "Get In Touch"}</h1>
-        <p class="text-zinc-400 max-w-2xl mx-auto leading-relaxed">{copy.contact.tagline || "We'd love to hear from you. Reach out and let's start a conversation."}</p>
+  <section class="py-20 lg:py-28 bg-[var(--bg-main)]">
+    <div class="max-w-7xl mx-auto px-6 space-y-16 animate-fade-in">
+      <!-- Header -->
+      <div class="text-center max-w-3xl mx-auto space-y-4">
+        <h1 class="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight ${strategy.fontFamilyHeading || 'font-serif'} text-[var(--text-main)] leading-tight">
+          {copy.contact.headline || "Get In Touch"}
+        </h1>
+        <div class="w-16 h-1 bg-[var(--primary)] mx-auto rounded-full"></div>
+        <p class="text-[var(--text-sec)] text-base md:text-lg max-w-2xl mx-auto">
+          {copy.contact.tagline || "We'd love to hear from you. Reach out and let's start a conversation."}
+        </p>
       </div>
-      <${contactComponent} title={copy.contact.headline || "Get In Touch"} phone={phone} address={address} email={email} primaryColor="${strategy.tailwindPrimaryColor || 'emerald-600'}" client:load />
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div class="p-8 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md text-center hover:border-${strategy.tailwindPrimaryColor || 'amber-500'}/30 transition-all duration-500">
-          <div class="w-12 h-12 rounded-full bg-${strategy.tailwindPrimaryColor || 'amber-500'}/10 flex items-center justify-center mx-auto mb-4">
-            <svg class="w-5 h-5 text-${strategy.tailwindPrimaryColor || 'amber-500'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-          </div>
-          <h4 class="text-white font-semibold mb-2">Business Hours</h4>
-          <p class="text-zinc-400 text-sm">Mon - Fri: 9:00 AM - 7:00 PM</p>
-          <p class="text-zinc-400 text-sm">Sat: 10:00 AM - 4:00 PM</p>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-16 items-start">
+        <!-- Contact Form -->
+        <div class="p-8 md:p-10 rounded-2xl bg-[var(--bg-sec)] border border-[var(--text-main)]/5 shadow-sm space-y-6">
+          <h3 class="text-2xl font-bold ${strategy.fontFamilyHeading || 'font-serif'} text-[var(--text-main)]">Send a Message</h3>
+          <form class="space-y-4">
+            <div>
+              <label for="name" class="block text-sm font-semibold text-[var(--text-main)] mb-1">Your Name</label>
+              <input type="text" id="name" required class="w-full px-4 py-3 rounded-xl border border-[var(--text-main)]/10 bg-[var(--bg-main)] text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all" />
+            </div>
+            <div>
+              <label for="email" class="block text-sm font-semibold text-[var(--text-main)] mb-1">Email Address</label>
+              <input type="email" id="email" required class="w-full px-4 py-3 rounded-xl border border-[var(--text-main)]/10 bg-[var(--bg-main)] text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all" />
+            </div>
+            <div>
+              <label for="phone" class="block text-sm font-semibold text-[var(--text-main)] mb-1">Phone Number</label>
+              <input type="tel" id="phone" class="w-full px-4 py-3 rounded-xl border border-[var(--text-main)]/10 bg-[var(--bg-main)] text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all" />
+            </div>
+            <div>
+              <label for="message" class="block text-sm font-semibold text-[var(--text-main)] mb-1">Message</label>
+              <textarea id="message" rows="4" required class="w-full px-4 py-3 rounded-xl border border-[var(--text-main)]/10 bg-[var(--bg-main)] text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)] transition-all"></textarea>
+            </div>
+            <button type="submit" class="w-full py-4 bg-[var(--primary)] hover:bg-[var(--primary-dark)] text-white font-bold rounded-xl transition-all shadow-md">
+              Send Message
+            </button>
+          </form>
         </div>
-        <div class="p-8 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md text-center hover:border-${strategy.tailwindPrimaryColor || 'amber-500'}/30 transition-all duration-500">
-          <div class="w-12 h-12 rounded-full bg-${strategy.tailwindPrimaryColor || 'amber-500'}/10 flex items-center justify-center mx-auto mb-4">
-            <svg class="w-5 h-5 text-${strategy.tailwindPrimaryColor || 'amber-500'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+
+        <!-- Contact Info & Map -->
+        <div class="space-y-8">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="p-6 rounded-2xl bg-[var(--bg-sec)] border border-[var(--text-main)]/5 flex gap-4 items-start shadow-sm">
+              <div class="w-10 h-10 rounded-full bg-[var(--primary-light)] flex items-center justify-center flex-shrink-0 text-[var(--primary-dark)]">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <h4 class="text-sm font-bold text-[var(--text-main)] mb-1">Hours</h4>
+                <p class="text-xs text-[var(--text-sec)]">Mon - Sat</p>
+                <p class="text-xs text-[var(--text-sec)]">9 AM - 7 PM</p>
+              </div>
+            </div>
+
+            <div class="p-6 rounded-2xl bg-[var(--bg-sec)] border border-[var(--text-main)]/5 flex gap-4 items-start shadow-sm">
+              <div class="w-10 h-10 rounded-full bg-[var(--primary-light)] flex items-center justify-center flex-shrink-0 text-[var(--primary-dark)]">
+                <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                </svg>
+              </div>
+              <div>
+                <h4 class="text-sm font-bold text-[var(--text-main)] mb-1">Call Us</h4>
+                <a href={\`tel:\${phone}\`} class="text-xs text-[var(--text-sec)] hover:text-[var(--primary)] transition-colors">{phone}</a>
+              </div>
+            </div>
           </div>
-          <h4 class="text-white font-semibold mb-2">Phone</h4>
-          <a href={\`tel:\${phone}\`} class="text-zinc-400 text-sm hover:text-white transition-colors">{phone}</a>
-        </div>
-        <div class="p-8 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-md text-center hover:border-${strategy.tailwindPrimaryColor || 'amber-500'}/30 transition-all duration-500">
-          <div class="w-12 h-12 rounded-full bg-${strategy.tailwindPrimaryColor || 'amber-500'}/10 flex items-center justify-center mx-auto mb-4">
-            <svg class="w-5 h-5 text-${strategy.tailwindPrimaryColor || 'amber-500'}" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+
+          <div class="p-6 rounded-2xl bg-[var(--bg-sec)] border border-[var(--text-main)]/5 flex gap-4 items-start shadow-sm">
+            <div class="w-10 h-10 rounded-full bg-[var(--primary-light)] flex items-center justify-center flex-shrink-0 text-[var(--primary-dark)]">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </div>
+            <div>
+              <h4 class="text-sm font-bold text-[var(--text-main)] mb-1">Address</h4>
+              <p class="text-xs text-[var(--text-sec)] leading-relaxed">{address}</p>
+            </div>
           </div>
-          <h4 class="text-white font-semibold mb-2">Location</h4>
-          <p class="text-zinc-400 text-sm">{address}</p>
+
+          <!-- Google Maps Embed -->
+          <div class="rounded-2xl overflow-hidden border border-[var(--text-main)]/5 h-64 w-full shadow-sm bg-[var(--bg-sec)]">
+            <iframe
+              width="100%"
+              height="100%"
+              style="border:0"
+              loading="lazy"
+              allowfullscreen
+              referrerpolicy="no-referrer-when-downgrade"
+              src={\`https://maps.google.com/maps?q=\${encodeURIComponent(address)}&t=&z=14&ie=UTF8&iwloc=&output=embed\`}
+            ></iframe>
+          </div>
         </div>
       </div>
     </div>
@@ -983,14 +1451,16 @@ const copy = ${JSON.stringify(copy)};
 const phone = "${phone}";
 ---
 <Layout title="Book Appointment">
-  <section class="py-24 px-6 bg-zinc-950 relative min-h-[90vh] flex flex-col justify-center overflow-hidden">
-    <div class="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-zinc-900 via-black to-black -z-10"></div>
-    <div class="max-w-6xl mx-auto w-full space-y-12">
-      <div class="text-center max-w-2xl mx-auto">
-        <h1 class="text-5xl md:text-6xl font-bold ${strategy.fontFamilyHeading || 'font-serif'} text-transparent bg-clip-text bg-gradient-to-r from-white via-zinc-200 to-zinc-500 mb-4 tracking-tight">Book an Appointment</h1>
-        <p class="text-zinc-400 leading-relaxed">Secure your slot in seconds. Select a service, pick your preferred date and time, and we'll handle the rest.</p>
+  <section class="py-20 lg:py-28 bg-[var(--bg-main)] min-h-[85vh] flex flex-col justify-center">
+    <div class="max-w-4xl mx-auto w-full px-6 space-y-12 animate-fade-in">
+      <div class="text-center max-w-2xl mx-auto space-y-4">
+        <h1 class="text-4xl md:text-5xl font-extrabold tracking-tight ${strategy.fontFamilyHeading || 'font-serif'} text-[var(--text-main)]">Book an Appointment</h1>
+        <div class="w-16 h-1 bg-[var(--primary)] mx-auto rounded-full"></div>
+        <p class="text-[var(--text-sec)] text-sm md:text-base leading-relaxed">Secure your slot in seconds. Select a service, pick your preferred date and time, and we'll handle the rest.</p>
       </div>
-      <BookingForm services={copy.services} primaryColor="${strategy.tailwindPrimaryColor || 'amber-500'}" businessPhone={phone} client:load />
+      <div class="bg-[var(--bg-sec)] p-6 md:p-10 rounded-2xl border border-[var(--text-main)]/5 shadow-xl">
+        <BookingForm services={copy.services} primaryColor="${strategy.colors.primary}" businessPhone={phone} client:load />
+      </div>
     </div>
   </section>
 </Layout>`;

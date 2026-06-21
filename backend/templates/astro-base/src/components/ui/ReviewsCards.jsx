@@ -1,19 +1,28 @@
-import React from 'react';
+import { motion } from 'framer-motion';
+
 export function ReviewsCards({ reviews }) {
+  const safeReviews = Array.isArray(reviews) ? reviews : [];
   return (
-    <div className="py-24 bg-zinc-100 px-8">
-      <h2 className="text-center text-4xl font-black mb-16 text-zinc-900 uppercase tracking-widest">Reviews</h2>
-      <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
-        {reviews.map((r, i) => (
-          <div key={i} className="bg-white p-10 rounded-none shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] border-2 border-black hover:-translate-y-1 hover:-translate-x-1 hover:shadow-[12px_12px_0px_0px_rgba(0,0,0,1)] transition-all">
-            <p className="text-2xl font-bold mb-4">"{r.text}"</p>
-            <div className="flex justify-between items-end mt-8">
-              <span className="font-bold text-xl">{r.author}</span>
-              <span className="text-yellow-500 text-2xl">{"★".repeat(r.rating)}</span>
+    <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
+      {safeReviews.map((r, i) => (
+        <motion.div
+          key={i}
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ delay: i * 0.1 }}
+          className="bg-zinc-900/80 p-8 rounded-2xl border border-white/5 backdrop-blur-md hover:border-white/10 transition-colors"
+        >
+          <div className="flex text-yellow-400 text-sm mb-4">{"★★★★★"}</div>
+          <p className="text-zinc-300 text-base mb-6 leading-relaxed break-words">"{r.text}"</p>
+          <div className="flex justify-between items-end">
+            <div className="min-w-0 flex-1 mr-4">
+              <span className="font-bold text-white text-sm truncate block">{r.author}</span>
+              {r.company && <span className="text-xs text-zinc-500 truncate block">{r.company}</span>}
             </div>
           </div>
-        ))}
-      </div>
+        </motion.div>
+      ))}
     </div>
   );
 }

@@ -1,16 +1,23 @@
-import React from 'react';
+import { motion } from 'framer-motion';
+
 export function ServicesBrutal({ services }) {
+  const safeServices = Array.isArray(services) ? services : [];
   return (
-    <div className="py-24 bg-yellow-400 px-8">
-      <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-8">
-        {services.map((s, i) => (
-          <div key={i} className="bg-white border-4 border-black p-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
-            <h3 className="text-3xl font-black uppercase mb-4">{s.title}</h3>
-            <div className="h-1 w-full bg-black mb-4"></div>
-            <p className="text-xl font-medium">{s.description}</p>
-          </div>
-        ))}
-      </div>
+    <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6">
+      {safeServices.map((s, i) => (
+        <motion.div
+          key={i}
+          initial={{ opacity: 0, rotate: -1 }}
+          whileInView={{ opacity: 1, rotate: 0 }}
+          viewport={{ once: true }}
+          transition={{ delay: i * 0.1 }}
+          className="bg-zinc-900 border-2 border-white/20 p-8 shadow-[6px_6px_0px_0px_rgba(255,255,255,0.1)] hover:-translate-y-1 hover:-translate-x-1 transition-transform"
+        >
+          <h3 className="text-2xl md:text-3xl font-black uppercase mb-4 text-white break-words">{s.title}</h3>
+          <div className="h-0.5 w-full bg-white/20 mb-4"></div>
+          <p className="text-zinc-400 text-base font-medium leading-relaxed">{s.description}</p>
+        </motion.div>
+      ))}
     </div>
   );
 }

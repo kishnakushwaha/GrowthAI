@@ -1,16 +1,23 @@
-import React from 'react';
+import { motion } from 'framer-motion';
+
 export function ServicesCards({ services }) {
+  const safeServices = Array.isArray(services) ? services : [];
   return (
-    <div className="py-24 bg-zinc-50 px-8">
-      <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-8">
-        {services.map((s, i) => (
-          <div key={i} className="bg-white p-10 rounded-2xl shadow-xl shadow-zinc-200/50 hover:-translate-y-2 transition-transform border border-zinc-100">
-            <div className="w-14 h-14 bg-blue-100 text-blue-600 rounded-xl mb-8 flex items-center justify-center">✦</div>
-            <h3 className="text-2xl font-bold mb-4 text-zinc-900">{s.title}</h3>
-            <p className="text-zinc-600 leading-relaxed">{s.description}</p>
-          </div>
-        ))}
-      </div>
+    <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
+      {safeServices.map((s, i) => (
+        <motion.div
+          key={i}
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ delay: i * 0.1 }}
+          className="bg-zinc-900/80 p-10 rounded-2xl border border-white/5 backdrop-blur-md hover:border-white/10 hover:-translate-y-1 transition-all duration-500"
+        >
+          <div className="w-12 h-12 bg-white/5 border border-white/10 text-white rounded-xl mb-8 flex items-center justify-center text-lg">✦</div>
+          <h3 className="text-xl font-bold mb-4 text-white">{s.title}</h3>
+          <p className="text-zinc-400 leading-relaxed text-sm">{s.description}</p>
+        </motion.div>
+      ))}
     </div>
   );
 }

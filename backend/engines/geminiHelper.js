@@ -23,6 +23,108 @@ async function waitForRateLimit() {
   lastCallTime = Date.now();
 }
 
+// ===================== GENERAL LLM CALL HELPER WITH RETRY =====================
+async function fetchWithRetry(url, options, maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const response = await fetch(url, options);
+    if (response.status === 429 || response.status === 503 || response.status === 500) {
+      const waitTime = Math.pow(2, attempt) * 4000;
+      console.warn(`⚠️ [GeminiHelper] API Error / Rate Limited (${response.status}). Attempt ${attempt}/${maxRetries}. Retrying in ${waitTime / 1000}s...`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+      continue;
+    }
+    return response;
+  }
+  return fetch(url, options);
+}
+
+async function callLLM(prompt, responseMimeType = null) {
+  const provider = process.env.LLM_PROVIDER || 'gemini';
+  
+  if (provider === 'groq' || process.env.GROQ_API_KEY) {
+    const apiKey = process.env.GROQ_API_KEY;
+    if (!apiKey) throw new Error('GROQ_API_KEY is missing in env');
+    const model = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+    
+    const response = await fetchWithRetry('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.2,
+        max_tokens: 8192,
+        ...(responseMimeType === 'json' ? { response_format: { type: 'json_object' } } : {})
+      })
+    });
+    
+    if (!response.ok) {
+      const err = await response.text();
+      console.error('[Groq API Error]:', response.status, err);
+      throw new Error(`Groq API returned ${response.status}`);
+    }
+    const data = await response.json();
+    return data.choices[0].message.content;
+  } 
+  
+  if (provider === 'grok' || provider === 'xai' || process.env.GROK_API_KEY || process.env.XAI_API_KEY) {
+    const apiKey = process.env.GROK_API_KEY || process.env.XAI_API_KEY;
+    if (!apiKey) throw new Error('GROK_API_KEY/XAI_API_KEY is missing in env');
+    const model = process.env.GROK_MODEL || 'grok-2-1212';
+    
+    const response = await fetchWithRetry('https://api.x.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: model,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.2,
+        max_tokens: 8192,
+        ...(responseMimeType === 'json' ? { response_format: { type: 'json_object' } } : {})
+      })
+    });
+    
+    if (!response.ok) {
+      const err = await response.text();
+      console.error('[Grok API Error]:', response.status, err);
+      throw new Error(`Grok API returned ${response.status}`);
+    }
+    const data = await response.json();
+    return data.choices[0].message.content;
+  }
+  
+  // Default: Gemini
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error('GEMINI_API_KEY is missing in env');
+  const model = process.env.GEMINI_MODEL || 'gemini-1.5-flash';
+  
+  const response = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        maxOutputTokens: 8192,
+        ...(responseMimeType === 'json' ? { response_mime_type: 'application/json' } : {})
+      }
+    })
+  });
+  
+  if (!response.ok) {
+    const err = await response.text();
+    console.error('[Gemini API Error]:', response.status, err);
+    throw new Error(`Gemini API returned status ${response.status}`);
+  }
+  const data = await response.json();
+  return data.candidates[0].content.parts[0].text;
+}
+
 // F6: Load industry-specific prompt override (if exists)
 // Self-learning: if industry not found, auto-generates one via Gemini and caches it
 async function getIndustryPrompt(industry) {
@@ -37,27 +139,18 @@ async function getIndustryPrompt(industry) {
     
     if (data?.system_prompt) return data.system_prompt;
 
-    // Not found — auto-generate a new industry prompt via Gemini and cache it
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) return null;
-
-    console.log(`[GEMINI] 🧠 Auto-generating prompt for new industry: "${normalized}"`);
-    const genResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: `You are a marketing AI system. Generate a concise system prompt (2-3 sentences max) for an AI sales agent sending WhatsApp messages to "${normalized}" businesses in India. The prompt should specify the tone, key selling points to mention, and what to avoid. Output ONLY the system prompt text, nothing else.` }] }] })
-    });
-
-    if (genResponse.ok) {
-      const genData = await genResponse.json();
-      const generatedPrompt = genData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-      if (generatedPrompt) {
-        // Cache it in the database for future use
-        await supabase.from('prompts').insert({ industry: normalized, system_prompt: generatedPrompt }).then(() => {
-          console.log(`[GEMINI] ✅ Cached new prompt for industry: "${normalized}"`);
-        });
-        return generatedPrompt;
-      }
+    // Not found — auto-generate a new industry prompt via LLM and cache it
+    console.log(`[AI] 🧠 Auto-generating prompt for new industry: "${normalized}"`);
+    const systemPromptText = `You are a marketing AI system. Generate a concise system prompt (2-3 sentences max) for an AI sales agent sending WhatsApp messages to "${normalized}" businesses in India. The prompt should specify the tone, key selling points to mention, and what to avoid. Output ONLY the system prompt text, nothing else.`;
+    
+    const generatedPrompt = await callLLM(systemPromptText);
+    if (generatedPrompt && generatedPrompt.trim()) {
+      const trimmedPrompt = generatedPrompt.trim();
+      // Cache it in the database for future use
+      await supabase.from('prompts').insert({ industry: normalized, system_prompt: trimmedPrompt }).then(() => {
+        console.log(`[AI] ✅ Cached new prompt for industry: "${normalized}"`);
+      });
+      return trimmedPrompt;
     }
     return null;
   } catch {
@@ -66,12 +159,6 @@ async function getIndustryPrompt(industry) {
 }
 
 export async function rewriteWithAI(baseTemplate, businessData, contactName = 'the owner') {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    console.warn('⚠️ GEMINI_API_KEY missing. Skipping AI rewrite.');
-    return null;
-  }
-
   try {
     // X4: Respect rate limits
     await waitForRateLimit();
@@ -106,35 +193,16 @@ ${baseTemplate}
 
 Output ONLY the raw rewritten WhatsApp message. No conversational filler or explanations.`;
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-    });
-
-    // X4: Detect rate limiting
-    if (response.status === 429) {
-      console.warn(`⚠️ Gemini rate limited (429). Will retry next cycle.`);
-      await logRewriteFailure(businessData, 'RATE_LIMITED');
+    const textResult = await callLLM(prompt);
+    if (!textResult || !textResult.trim()) {
+      console.warn('⚠️ AI returned no candidates for rewrite.');
+      await logRewriteFailure(businessData, 'EMPTY_RESPONSE');
       return null;
     }
 
-    if (!response.ok) {
-      console.warn(`⚠️ Gemini HTTP ${response.status}: ${response.statusText}`);
-      await logRewriteFailure(businessData, `HTTP_${response.status}`);
-      return null;
-    }
-
-    const data = await response.json();
-    if (!data.candidates || data.candidates.length === 0) {
-      console.warn('⚠️ Gemini returned no candidates for rewrite.');
-      await logRewriteFailure(businessData, 'NO_CANDIDATES');
-      return null;
-    }
-
-    return data.candidates[0].content.parts[0].text.trim();
+    return textResult.trim();
   } catch (err) {
-    console.error('❌ Gemini Rewrite Error:', err.message);
+    console.error('❌ AI Rewrite Error:', err.message);
     await logRewriteFailure(businessData, err.message);
     return null;
   }
@@ -154,12 +222,6 @@ async function logRewriteFailure(businessData, reason) {
 }
 
 export async function parseReplyIntent(messageBody) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    console.warn('⚠️ GEMINI_API_KEY missing. Cannot parse intent.');
-    return { interested: false, reason: "API key missing" };
-  }
-
   try {
     await waitForRateLimit();
     const prompt = `You are an expert sales assistant analyzing a reply from a business owner on WhatsApp.
@@ -173,16 +235,7 @@ Message from customer: "${messageBody}"
 Respond with ONLY a JSON object in this format:
 {"interested": true/false, "reason": "brief reason"}`;
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-    });
-
-    if (!response.ok) return { interested: false, reason: "API error" };
-    
-    const data = await response.json();
-    const textResult = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    const textResult = await callLLM(prompt, 'json');
     if (!textResult) return { interested: false, reason: "No text returned" };
     
     try {
@@ -193,7 +246,7 @@ Respond with ONLY a JSON object in this format:
       return { interested: false, reason: "JSON parse error" };
     }
   } catch (err) {
-    console.error('❌ Gemini Intent Parse Error:', err.message);
+    console.error('❌ AI Intent Parse Error:', err.message);
     return { interested: false, reason: "Exception thrown" };
   }
 }

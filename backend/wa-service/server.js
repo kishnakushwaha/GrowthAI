@@ -151,8 +151,43 @@ async function startWhatsApp() {
                description: `Lead replied positively on WhatsApp. Automated sequences paused and moved to "Contacted" stage. AI Reason: ${intent.reason || 'N/A'}`
              });
 
-             replyMsg = "Thanks! A member of our team will get back to you shortly.";
-             msg.reply(replyMsg);
+             // Check if Builder Agent should be triggered
+             if (leadData && (!leadData.website || leadData.website === 'N/A' || leadData.website.trim() === '')) {
+                 console.log(`[WA] 🏗️ Lead has no website. Triggering Builder Agent API...`);
+                 
+                 replyMsg = "Awesome! Let me show you what I have built for you — our team has crafted a custom demo website just for your business. Give me just a moment...";
+                 msg.reply(replyMsg);
+                 
+                 try {
+                     const backendUrl = process.env.BACKEND_URL || 'http://localhost:3001';
+                     const builderRes = await fetch(`${backendUrl}/api/builder/generate`, {
+                         method: 'POST',
+                         headers: { 'Content-Type': 'application/json' },
+                         body: JSON.stringify({ lead: leadData })
+                     });
+                     
+                     if (builderRes.ok) {
+                         const builderData = await builderRes.json();
+                         const finalMsg = `Okay, it's ready! Here is your custom demo: ${builderData.url}\nLet me know what you think!`;
+                         msg.reply(finalMsg);
+                         
+                         await supabase.from('wa_logs').insert({ 
+                            phone, 
+                            message: `[BUILDER]: ${finalMsg}`, 
+                            type: 'automation', 
+                            status: 'sent', 
+                            lead_id: enrollment.lead_id 
+                         });
+                     } else {
+                         msg.reply("Oops, our AI builder hit a snag, but one of our human designers will reach out shortly!");
+                     }
+                 } catch (err) {
+                     console.error('[WA] Builder Agent API Error:', err.message);
+                 }
+             } else {
+                 replyMsg = "Thanks! A member of our team will get back to you shortly.";
+                 msg.reply(replyMsg);
+             }
          } else {
              // Engage RAG Engine for questions/objections
              console.log(`[WA] Intent not explicitly interested. Triggering RAG Chatbot...`);
